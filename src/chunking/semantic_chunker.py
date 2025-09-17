@@ -14,7 +14,15 @@ from src.embeddings.provider import EmbeddingsProvider
 
 @dataclass
 class SemanticChunk:
-    """Rappresenta un chunk semantico"""
+    """Rappresenta un chunk semantico
+    
+    Args:
+        content (str): Contenuto del chunk
+        metadata (Dict[str, Any]): Metadati associati al chunk
+        chunk_id (str): ID univoco del chunk
+        start_index (int): Indice di inizio del chunk
+        end_index (int): Indice di fine del chunk 
+    """
     content: str
     metadata: Dict[str, Any]
     chunk_id: str
@@ -29,6 +37,13 @@ class AdvancedSemanticChunker:
     """
     
     def __init__(self, config: ChunkingConfig, embeddings_provider: EmbeddingsProvider):
+        """
+        Inizializza il semantic chunker
+        
+        Args:
+            config: Configurazione del chunking
+            embeddings_provider: Provider di embeddings
+        """
         self.config = config
         self.logger = logging.getLogger(__name__)
         

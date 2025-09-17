@@ -14,9 +14,9 @@ from langchain_openai.embeddings import OpenAIEmbeddings
 @dataclass
 class EmbeddingsConfig:
     """Configurazione per il provider di embeddings"""
-    provider: str = "openai" 
-    model: str = "text-embedding-3-small"
-    api_key_env: str = "OPENAI_API_KEY"
+    provider: str = "cohere" 
+    model: str = "embed-multilingual-light-v3.0"
+    api_key_env: str = "COHERE_API_KEY"
 
 class EmbeddingsProvider:
     """
