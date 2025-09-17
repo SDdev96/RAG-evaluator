@@ -3,7 +3,7 @@ Semantic Chunking implementato seguendo l'approccio di LangChain
 """
 import logging
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain.schema import Document
@@ -29,36 +29,38 @@ class SemanticChunk:
     start_index: int
     end_index: int
 
-
+@dataclass
 class AdvancedSemanticChunker:
     """
     Chunker semantico avanzato che utilizza embeddings per determinare
     i punti di divisione naturali del testo
     """
-    
-    def __init__(self, config: ChunkingConfig, embeddings_provider: EmbeddingsProvider):
+
+    config: ChunkingConfig
+    embeddings_provider: EmbeddingsProvider
+
+    # campi non passati al costruttore
+    logger: logging.Logger = field(init=False)
+    embeddings: Any = field(init=False)
+    text_splitter: Any = field(init=False)
+
+    def __post_init__(self):
         """
-        Inizializza il semantic chunker
-        
-        Args:
-            config: Configurazione del chunking
-            embeddings_provider: Provider di embeddings
+        Inizializza i campi derivati dopo la creazione automatica da dataclass
         """
-        self.config = config
         self.logger = logging.getLogger(__name__)
         
         # Provider centralizzato
-        self.embeddings_provider = embeddings_provider
-        self.embeddings = embeddings_provider.get_langchain_embeddings()
-        
+        self.embeddings = self.embeddings_provider.get_langchain_embeddings()
+
         # Inizializza il semantic chunker
         self.text_splitter = SemanticChunker(
             embeddings=self.embeddings,
-            breakpoint_threshold_type=config.breakpoint_threshold_type,
-            breakpoint_threshold_amount=config.breakpoint_threshold_amount
+            breakpoint_threshold_type=self.config.breakpoint_threshold_type,
+            breakpoint_threshold_amount=self.config.breakpoint_threshold_amount
         )
-        
-        self.logger.info(f"Semantic Chunker inizializzato con {config.breakpoint_threshold_type}")
+
+        self.logger.info(f"Semantic Chunker inizializzato con {self.config.breakpoint_threshold_type}")
     
     def chunk_text(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[SemanticChunk]:
         """
