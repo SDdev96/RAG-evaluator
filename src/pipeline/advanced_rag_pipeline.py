@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from config.config import RAGConfig, get_default_config
-from src.document_processing.docling_processor import DoclingProcessor, ProcessedDocument
+from src.document_processing.pdf_processor import PdfProcessor, ProcessedDocument
 from src.chunking.semantic_chunker import AdvancedSemanticChunker, SemanticChunk
 from src.query_handling.hype_processor import HyPEProcessor, EnrichedChunk
 from src.retrieval.fusion_retriever import FusionRetriever, RetrievalResult
@@ -67,8 +67,8 @@ class AdvancedRAGPipeline:
     def _initialize_components(self):
         """Inizializza tutti i componenti della pipeline"""
         try:
-            # Document Processor
-            self.doc_processor = DoclingProcessor(self.config.document_processing)
+            # Document Processor (PyPDF2)
+            self.doc_processor = PdfProcessor(self.config.document_processing)
             
             # Semantic Chunker
             self.embeddings_provider = EmbeddingsProvider.get(self.config.embeddings)
