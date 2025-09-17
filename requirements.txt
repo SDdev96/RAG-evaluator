@@ -5,9 +5,7 @@ langchain-experimental>=0.0.59
 langchain-community>=0.2.6
 
 # Document processing
-docling>=1.0.0
 PyPDF2>=3.0.0
-python-docx>=0.8.11
 
 # Vector search and embeddings
 faiss-cpu>=1.8.0

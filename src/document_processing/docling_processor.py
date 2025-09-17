@@ -7,14 +7,8 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 
-try:
-    from docling.document_converter import DocumentConverter
-    from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
-    from docling.document_converter import PdfFormatOption
-except ImportError:
-    logging.warning("Docling non installato. Usando fallback con PyPDF2")
-    DocumentConverter = None
+# Docling disabilitato: forziamo l'uso di PyPDF2
+DocumentConverter = None
 
 import PyPDF2
 from config.config import DocumentProcessingConfig
@@ -35,16 +29,11 @@ class DoclingProcessor:
     def __init__(self, config: DocumentProcessingConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
+        # Forza utilizzo PyPDF2
+        self.converter = None
+        self.use_docling = False
+        self.logger.info("ℹ️ Docling disabilitato: uso forzato di PyPDF2 per il processing dei PDF")
         
-        # Inizializza Docling se disponibile
-        if DocumentConverter is not None:
-            self.converter = DocumentConverter()
-            self.use_docling = True
-        else:
-            self.converter = None
-            self.use_docling = False
-            self.logger.warning("Docling non disponibile, usando PyPDF2 come fallback")
-    
     def process_document(self, file_path: str) -> ProcessedDocument:
         """
         Processa un singolo documento
@@ -66,53 +55,8 @@ class DoclingProcessor:
         
         self.logger.info(f"Processando documento: {file_path}")
         
-        if self.use_docling and file_path.suffix.lower() == '.pdf':
-            return self._process_with_docling(file_path)
-        else:
-            return self._process_with_fallback(file_path)
-    
-    def _process_with_docling(self, file_path: Path) -> ProcessedDocument:
-        """Processa il documento usando Docling"""
-        try:
-            # Configura le opzioni per PDF
-            pipeline_options = PdfPipelineOptions()
-            pipeline_options.do_ocr = True
-            pipeline_options.do_table_structure = True
-            
-            # Converte il documento
-            result = self.converter.convert(
-                str(file_path),
-                format_options={
-                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
-                }
-            )
-            
-            # Estrae il contenuto in formato Markdown
-            content = result.document.export_to_markdown()
-            
-            # Prepara i metadati
-            metadata = {
-                "title": result.document.name,
-                "pages": len(result.document.pages) if hasattr(result.document, 'pages') else 1,
-                "processing_method": "docling",
-                "format": "markdown"
-            }
-            
-            # Salva il file processato
-            output_path = self._get_output_path(file_path, ".md")
-            self._save_processed_content(content, output_path)
-            
-            return ProcessedDocument(
-                content=content,
-                metadata=metadata,
-                source_path=str(file_path),
-                output_path=str(output_path)
-            )
-            
-        except Exception as e:
-            self.logger.error(f"Errore nel processing con Docling: {e}")
-            # Fallback a PyPDF2
-            return self._process_with_fallback(file_path)
+        # Usa sempre PyPDF2 o lettura testo semplice
+        return self._process_with_fallback(file_path)
     
     def _process_with_fallback(self, file_path: Path) -> ProcessedDocument:
         """Processa il documento usando metodi di fallback"""
