@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 
 from config.config import HyPEConfig
 from src.chunking.semantic_chunker import SemanticChunk
+from src.embeddings.provider import EmbeddingsProvider
 
 
 @dataclass
@@ -37,7 +38,7 @@ class HyPEProcessor:
     e crea embeddings ottimizzati per il retrieval
     """
     
-    def __init__(self, config: HyPEConfig):
+    def __init__(self, config: HyPEConfig, embeddings_provider: EmbeddingsProvider):
         self.config = config
         self.logger = logging.getLogger(__name__)
         
@@ -48,10 +49,8 @@ class HyPEProcessor:
             max_tokens=config.max_tokens
         )
         
-        # Inizializza gli embeddings
-        self.embeddings = OpenAIEmbeddings(
-            model=config.embedding_model
-        )
+        # Provider centralizzato embeddings
+        self.embeddings_provider = embeddings_provider
         
         self.logger.info(f"HyPE Processor inizializzato con {config.language_model}")
     
@@ -222,7 +221,7 @@ class HyPEProcessor:
         
         if question_texts:
             try:
-                embeddings_result = self.embeddings.embed_documents(question_texts)
+                embeddings_result = self.embeddings_provider.embed_texts(question_texts)
                 embeddings_list = embeddings_result
             except Exception as e:
                 self.logger.error(f"Errore nella generazione embeddings per chunk {chunk.chunk_id}: {e}")
@@ -246,7 +245,7 @@ class HyPEProcessor:
             List[float]: Embedding della query
         """
         try:
-            query_embedding = self.embeddings.embed_query(query)
+            query_embedding = self.embeddings_provider.embed_query(query)
             return query_embedding
         except Exception as e:
             self.logger.error(f"Errore nell'embedding della query: {e}")
@@ -280,9 +279,11 @@ class HyPEProcessor:
         return stats
 
 
-def create_hype_processor(config: Optional[HyPEConfig] = None) -> HyPEProcessor:
+def create_hype_processor(config: Optional[HyPEConfig] = None, 
+                         embeddings_provider: Optional[EmbeddingsProvider] = None) -> HyPEProcessor:
     """Factory function per creare un processore HyPE"""
     if config is None:
         config = HyPEConfig()
-    
-    return HyPEProcessor(config)
+    if embeddings_provider is None:
+        raise ValueError("EmbeddingsProvider è richiesto per creare HyPEProcessor")
+    return HyPEProcessor(config, embeddings_provider)

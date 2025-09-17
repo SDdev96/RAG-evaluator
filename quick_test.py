@@ -158,14 +158,18 @@ def test_semantic_chunking(processed_doc):
     
     try:
         from src.chunking.semantic_chunker import create_semantic_chunker
-        from config.config import ChunkingConfig
+        from config.config import ChunkingConfig, get_default_config
+        from src.embeddings.provider import EmbeddingsProvider
         
         if not processed_doc:
             print("❌ Nessun documento processato disponibile")
             return False, []
         
         config = ChunkingConfig()
-        chunker = create_semantic_chunker(config)
+        # Inizializza provider centralizzato dagli defaults
+        rag_cfg = get_default_config()
+        provider = EmbeddingsProvider.get(rag_cfg.embeddings)
+        chunker = create_semantic_chunker(config, embeddings_provider=provider)
         
         # Usa un testo più breve per il test se necessario
         test_content = processed_doc.content[:2000] if len(processed_doc.content) > 2000 else processed_doc.content

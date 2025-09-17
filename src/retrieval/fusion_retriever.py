@@ -8,11 +8,11 @@ from dataclasses import dataclass
 
 import faiss
 from rank_bm25 import BM25Okapi
-from langchain_openai import OpenAIEmbeddings
 from langchain.schema import Document
 
 from config.config import FusionRetrievalConfig
 from src.query_handling.hype_processor import EnrichedChunk
+from src.embeddings.provider import EmbeddingsProvider
 
 
 @dataclass
@@ -32,12 +32,12 @@ class FusionRetriever:
     Retriever che combina ricerca vettoriale (FAISS) e ricerca per parole chiave (BM25)
     """
     
-    def __init__(self, config: FusionRetrievalConfig):
+    def __init__(self, config: FusionRetrievalConfig, embeddings_provider: EmbeddingsProvider):
         self.config = config
         self.logger = logging.getLogger(__name__)
         
         # Inizializza componenti
-        self.embeddings = OpenAIEmbeddings(model=config.embedding_model)
+        self.embeddings_provider = embeddings_provider
         self.vector_index = None
         self.bm25_index = None
         self.chunks_data = []
@@ -64,7 +64,7 @@ class FusionRetriever:
             
             # Aggiungi embedding del contenuto originale del chunk
             try:
-                chunk_embedding = self.embeddings.embed_query(chunk.content)
+                chunk_embedding = self.embeddings_provider.embed_query(chunk.content)
                 all_embeddings.append(chunk_embedding)
                 all_texts.append(chunk.content)
                 
@@ -188,7 +188,7 @@ class FusionRetriever:
         """Esegue ricerca vettoriale"""
         try:
             # Genera embedding della query
-            query_embedding = self.embeddings.embed_query(query)
+            query_embedding = self.embeddings_provider.embed_query(query)
             query_vector = np.array([query_embedding], dtype=np.float32)
             
             # Normalizza per similarità coseno
@@ -321,9 +321,11 @@ class FusionRetriever:
         return stats
 
 
-def create_fusion_retriever(config: Optional[FusionRetrievalConfig] = None) -> FusionRetriever:
+def create_fusion_retriever(config: Optional[FusionRetrievalConfig] = None, 
+                           embeddings_provider: Optional[EmbeddingsProvider] = None) -> FusionRetriever:
     """Factory function per creare un fusion retriever"""
     if config is None:
         config = FusionRetrievalConfig()
-    
-    return FusionRetriever(config)
+    if embeddings_provider is None:
+        raise ValueError("EmbeddingsProvider è richiesto per creare FusionRetriever")
+    return FusionRetriever(config, embeddings_provider)

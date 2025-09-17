@@ -20,6 +20,7 @@ from src.chunking.semantic_chunker import AdvancedSemanticChunker, SemanticChunk
 from src.query_handling.hype_processor import HyPEProcessor, EnrichedChunk
 from src.retrieval.fusion_retriever import FusionRetriever, RetrievalResult
 from src.generation.gemini_generator import GeminiGenerator, GenerationResult
+from src.embeddings.provider import EmbeddingsProvider
 
 
 @dataclass
@@ -70,13 +71,16 @@ class AdvancedRAGPipeline:
             self.doc_processor = DoclingProcessor(self.config.document_processing)
             
             # Semantic Chunker
-            self.chunker = AdvancedSemanticChunker(self.config.chunking)
+            # Embeddings provider centralizzato
+            self.embeddings_provider = EmbeddingsProvider.get(self.config.embeddings)
+
+            self.chunker = AdvancedSemanticChunker(self.config.chunking, self.embeddings_provider)
             
             # HyPE Processor
-            self.hype_processor = HyPEProcessor(self.config.hype)
+            self.hype_processor = HyPEProcessor(self.config.hype, self.embeddings_provider)
             
             # Fusion Retriever
-            self.retriever = FusionRetriever(self.config.fusion_retrieval)
+            self.retriever = FusionRetriever(self.config.fusion_retrieval, self.embeddings_provider)
             
             # Gemini Generator
             if not self.config.google_api_key:

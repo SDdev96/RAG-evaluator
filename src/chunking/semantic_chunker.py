@@ -6,10 +6,10 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain.schema import Document
 
 from config.config import ChunkingConfig
+from src.embeddings.provider import EmbeddingsProvider
 
 
 @dataclass
@@ -28,14 +28,13 @@ class AdvancedSemanticChunker:
     i punti di divisione naturali del testo
     """
     
-    def __init__(self, config: ChunkingConfig):
+    def __init__(self, config: ChunkingConfig, embeddings_provider: EmbeddingsProvider):
         self.config = config
         self.logger = logging.getLogger(__name__)
         
-        # Inizializza gli embeddings
-        self.embeddings = OpenAIEmbeddings(
-            model=config.embedding_model
-        )
+        # Provider centralizzato
+        self.embeddings_provider = embeddings_provider
+        self.embeddings = embeddings_provider.get_langchain_embeddings()
         
         # Inizializza il semantic chunker
         self.text_splitter = SemanticChunker(
@@ -251,9 +250,11 @@ class AdvancedSemanticChunker:
         return stats
 
 
-def create_semantic_chunker(config: Optional[ChunkingConfig] = None) -> AdvancedSemanticChunker:
+def create_semantic_chunker(config: Optional[ChunkingConfig] = None, 
+                           embeddings_provider: Optional[EmbeddingsProvider] = None) -> AdvancedSemanticChunker:
     """Factory function per creare un semantic chunker"""
     if config is None:
         config = ChunkingConfig()
-    
-    return AdvancedSemanticChunker(config)
+    if embeddings_provider is None:
+        raise ValueError("EmbeddingsProvider è richiesto per creare AdvancedSemanticChunker")
+    return AdvancedSemanticChunker(config, embeddings_provider)

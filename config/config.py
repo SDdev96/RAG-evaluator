@@ -58,6 +58,14 @@ class GenerationConfig:
 
 
 @dataclass
+class EmbeddingsSystemConfig:
+    """Configurazione per il provider di embeddings centralizzato"""
+    provider: str = "openai"
+    model: str = "text-embedding-3-small"
+    api_key_env: str = "OPENAI_API_KEY"
+
+
+@dataclass
 class RAGConfig:
     """Configurazione principale del sistema RAG"""
     document_processing: DocumentProcessingConfig
@@ -65,6 +73,7 @@ class RAGConfig:
     hype: HyPEConfig
     fusion_retrieval: FusionRetrievalConfig
     generation: GenerationConfig
+    embeddings: EmbeddingsSystemConfig = None
     
     # API Keys
     openai_api_key: Optional[str] = None
@@ -79,6 +88,10 @@ class RAGConfig:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.google_api_key = os.getenv("GOOGLE_API_KEY")
         
+        # Inizializza embeddings config se non fornita
+        if self.embeddings is None:
+            self.embeddings = EmbeddingsSystemConfig()
+
         # Crea le directory se non esistono
         os.makedirs(self.vector_store_path, exist_ok=True)
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -92,5 +105,6 @@ def get_default_config() -> RAGConfig:
         chunking=ChunkingConfig(),
         hype=HyPEConfig(),
         fusion_retrieval=FusionRetrievalConfig(),
-        generation=GenerationConfig()
+        generation=GenerationConfig(),
+        embeddings=EmbeddingsSystemConfig()
     )
