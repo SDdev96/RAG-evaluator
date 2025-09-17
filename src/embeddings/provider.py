@@ -7,7 +7,7 @@ import os
 import threading
 from dataclasses import dataclass
 from typing import List, Optional
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
 
 @dataclass
