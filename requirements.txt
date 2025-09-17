@@ -2,6 +2,7 @@
 langchain>=0.2.7
 langchain-experimental>=0.0.59
 langchain-community>=0.2.6
+langchain-cohere>=0.4.6
 
 # Document processing
 PyPDF2>=3.0.0
