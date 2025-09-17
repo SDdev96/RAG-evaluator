@@ -82,6 +82,7 @@ class AdvancedSemanticChunker:
             
             chunks = []
             current_index = 0
+            total_length = 0
             
             for i, doc in enumerate(documents):
                 chunk_content = doc.page_content
@@ -93,15 +94,19 @@ class AdvancedSemanticChunker:
                 
                 # Verifica dimensioni del chunk
                 if len(chunk_content) < self.config.min_chunk_size:
-                    self.logger.warning(f"Chunk {i} troppo piccolo ({len(chunk_content)} caratteri)")
+                    total_length += len(chunk_content)
+                    self.logger.warning(f"Chunk {i} troppo piccolo ({len(chunk_content)} caratteri). Lunghezza totale: {total_length}")
                     continue
                 
                 if len(chunk_content) > self.config.max_chunk_size:
-                    self.logger.warning(f"Chunk {i} troppo grande ({len(chunk_content)} caratteri)")
+                    total_length += len(chunk_content)
+                    self.logger.warning(f"Chunk {i} troppo grande ({len(chunk_content)} caratteri). Lunghezza totale: {total_length}")
                     # Suddivide ulteriormente il chunk se necessario
                     sub_chunks = self._split_large_chunk(chunk_content, i, start_index, metadata)
                     chunks.extend(sub_chunks)
                 else:
+                    total_length += len(chunk_content)
+                    self.logger.warning(f"Chunk {i} nella media ({len(chunk_content)} caratteri). Lunghezza totale: {total_length}")
                     # Crea il chunk semantico
                     chunk = SemanticChunk(
                         content=chunk_content,
