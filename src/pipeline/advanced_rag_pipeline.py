@@ -71,7 +71,6 @@ class AdvancedRAGPipeline:
             self.doc_processor = DoclingProcessor(self.config.document_processing)
             
             # Semantic Chunker
-            # Embeddings provider centralizzato
             self.embeddings_provider = EmbeddingsProvider.get(self.config.embeddings)
 
             self.chunker = AdvancedSemanticChunker(self.config.chunking, self.embeddings_provider)

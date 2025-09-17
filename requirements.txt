@@ -1,8 +1,8 @@
 # Core RAG dependencies
-langchain>=0.1.0
-langchain-openai>=0.1.0
-langchain-experimental>=0.0.50
-langchain-community>=0.0.20
+langchain>=0.2.7
+langchain-openai>=0.1.15
+langchain-experimental>=0.0.59
+langchain-community>=0.2.6
 
 # Document processing
 docling>=1.0.0
@@ -10,24 +10,21 @@ PyPDF2>=3.0.0
 python-docx>=0.8.11
 
 # Vector search and embeddings
-faiss-cpu>=1.7.4
-openai>=1.0.0
+faiss-cpu>=1.8.0
+openai>=1.40.0
+tiktoken>=0.7.0
 
 # BM25 for fusion retrieval
 rank-bm25>=0.2.2
 
 # Google Gemini
-google-generativeai>=0.3.0
+google-generativeai>=0.6.0
 
 # Utilities
-numpy>=1.24.0
-pandas>=2.0.0
+numpy>=1.26.0
+pandas>=2.2.0
 tqdm>=4.65.0
 python-dotenv>=1.0.0
-
-# Async processing
-asyncio
-concurrent.futures
 
 # Logging and monitoring
 loguru>=0.7.0
