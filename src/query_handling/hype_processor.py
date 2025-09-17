@@ -2,13 +2,13 @@
 HyPE (Hypothetical Prompt Embeddings) per il query handling avanzato
 """
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
-from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+import google.generativeai as genai
 
 from config.config import HyPEConfig
 from src.chunking.semantic_chunker import SemanticChunk
@@ -42,12 +42,12 @@ class HyPEProcessor:
         self.config = config
         self.logger = logging.getLogger(__name__)
         
-        # Inizializza il modello di linguaggio
-        self.llm = ChatOpenAI(
-            model=config.language_model,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens
-        )
+        # Inizializza Gemini (usa GOOGLE_API_KEY dall'ambiente)
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY non configurata per HyPE")
+        genai.configure(api_key=api_key)
+        self.llm_model = config.language_model or "gemini-1.5-flash"
         
         # Provider centralizzato embeddings
         self.embeddings_provider = embeddings_provider
@@ -65,65 +65,36 @@ class HyPEProcessor:
             List[HypotheticalQuestion]: Lista di domande ipotetiche
         """
         try:
-            # Crea il prompt per generare domande ipotetiche
-            system_prompt = """Sei un esperto nell'analisi di documenti tecnici. 
-            Il tuo compito è generare domande ipotetiche che un utente potrebbe fare 
-            per cercare le informazioni contenute nel testo fornito.
-            
-            Regole:
-            1. Genera esattamente {num_questions} domande diverse
-            2. Le domande devono essere specifiche e pertinenti al contenuto
-            3. Usa un linguaggio naturale e vario
-            4. Includi sia domande dirette che concettuali
-            5. Ogni domanda deve essere su una riga separata
-            6. Non numerare le domande
-            
-            Esempio di formato:
-            Come si configura il sistema di autenticazione?
-            Quali sono i requisiti hardware minimi?
-            Che cosa succede in caso di errore di connessione?"""
-            
-            human_prompt = f"""Contenuto del documento:
-            
-            {chunk.content[:2000]}...
-            
-            Genera {self.config.num_hypothetical_questions} domande ipotetiche che un utente potrebbe fare per trovare queste informazioni."""
-            
-            # Genera le domande
-            messages = [
-                SystemMessage(content=system_prompt.format(num_questions=self.config.num_hypothetical_questions)),
-                HumanMessage(content=human_prompt)
-            ]
-            
-            response = self.llm.invoke(messages)
-            questions_text = response.content.strip()
-            
-            # Processa le domande generate
-            questions = []
-            for i, question_line in enumerate(questions_text.split('\n')):
-                question = question_line.strip()
-                if question and not question.startswith('#'):
-                    # Rimuove numerazione se presente
-                    question = self._clean_question(question)
-                    
-                    hyp_question = HypotheticalQuestion(
-                        question=question,
-                        chunk_id=chunk.chunk_id,
-                        confidence=1.0 - (i * 0.1),  # Confidence decrescente
-                        metadata={
-                            "generation_method": "llm",
-                            "source_chunk_size": len(chunk.content),
-                            "question_index": i
-                        }
-                    )
-                    questions.append(hyp_question)
-            
+            num_q = self.config.num_hypothetical_questions
+            prompt = (
+                "Sei un esperto nell'analisi di documenti tecnici. "
+                "Genera esattamente {num_q} domande ipotetiche che un utente potrebbe fare "
+                "per cercare le informazioni contenute nel testo fornito. "
+                "Regole: 1) Ogni domanda su una singola riga; 2) Domande concise e specifiche; 3) In italiano.\n\n"
+                f"Testo del chunk:\n{chunk.content[:4000]}\n\n"
+                f"Genera {num_q} domande:"
+            )
+            model = genai.GenerativeModel(self.llm_model)
+            response = model.generate_content(prompt)
+            text = (response.text or "").strip()
+            lines = [ln.strip("- ").strip() for ln in text.split("\n") if ln.strip()]
+            lines = lines[:num_q]
+            questions: List[HypotheticalQuestion] = []
+            for i, q in enumerate(lines):
+                questions.append(HypotheticalQuestion(
+                    question=q,
+                    chunk_id=chunk.chunk_id,
+                    confidence=max(0.0, 1.0 - i * 0.1),
+                    metadata={
+                        "generation_method": "llm",
+                        "source_chunk_size": len(chunk.content),
+                        "question_index": i
+                    }
+                ))
             self.logger.debug(f"Generate {len(questions)} domande per chunk {chunk.chunk_id}")
             return questions
-            
         except Exception as e:
             self.logger.error(f"Errore nella generazione di domande per chunk {chunk.chunk_id}: {e}")
-            # Genera domande di fallback
             return self._generate_fallback_questions(chunk)
     
     def _clean_question(self, question: str) -> str:

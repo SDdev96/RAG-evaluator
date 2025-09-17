@@ -7,16 +7,14 @@ import os
 import threading
 from dataclasses import dataclass
 from typing import List, Optional
-
-from langchain_openai.embeddings import OpenAIEmbeddings
-
+from langchain_cohere import CohereEmbeddings
 
 @dataclass
 class EmbeddingsConfig:
     """Configurazione per il provider di embeddings"""
-    provider: str = "openai" 
-    model: str = "text-embedding-3-small"
-    api_key_env: str = "OPENAI_API_KEY"
+    provider: str = "cohere" 
+    model: str = "embed-multilingual-light-v3.0"
+    api_key_env: str = "COHERE_API_KEY"
 
 class EmbeddingsProvider:
     """
@@ -31,7 +29,7 @@ class EmbeddingsProvider:
 
     def __init__(self, config: EmbeddingsConfig):
         self.config = config
-        self._lc_embeddings: Optional[OpenAIEmbeddings] = None
+        self._lc_embeddings: Optional[CohereEmbeddings] = None
 
     @classmethod
     def get(cls, config: EmbeddingsConfig) -> EmbeddingsProvider:
@@ -44,13 +42,14 @@ class EmbeddingsProvider:
     def _ensure_initialized(self):
         if self._lc_embeddings is not None:
             return
-        if self.config.provider == "openai":
-            api_key = os.getenv(self.config.api_key_env)
-            if not api_key:
-                raise ValueError(
-                    f"API key non trovata in env var {self.config.api_key_env} per embeddings OpenAI"
-                )
-            self._lc_embeddings = OpenAIEmbeddings(model=self.config.model)
+        api_key = os.getenv(self.config.api_key_env)
+        if not api_key:
+            raise ValueError(
+                f"API key non trovata in env var {self.config.api_key_env} per embeddings {self.config.provider}"
+            )
+        if self.config.provider == "cohere":
+            # LangChain community wrapper per Cohere
+            self._lc_embeddings = CohereEmbeddings(model=self.config.model, cohere_api_key=api_key)
         else:
             raise NotImplementedError(f"Provider embeddings non supportato: {self.config.provider}")
 

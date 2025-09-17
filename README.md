@@ -31,7 +31,7 @@ pip install -r requirements.txt
 ### 3. Configura le API Keys
 Crea un file `.env` nella root del progetto:
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
+COHERE_API_KEY=your_cohere_api_key_here
 GOOGLE_API_KEY=your_google_gemini_api_key_here
 ```
 
