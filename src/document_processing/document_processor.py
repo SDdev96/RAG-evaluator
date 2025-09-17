@@ -174,9 +174,8 @@ class DocumentProcessor:
         return processed_docs
 
 
-def create_processor(config: Optional[DocumentProcessingConfig] = None) -> DoclingProcessor:
-    """Factory function per creare un processore di documenti"""
+def create_processor(config: Optional[DocumentProcessingConfig] = None) -> DocumentProcessor:
+    """Factory function per creare un processore di documenti (PyPDF2)."""
     if config is None:
         config = DocumentProcessingConfig()
-    
-    return DoclingProcessor(config)
+    return DocumentProcessor(config)

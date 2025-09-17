@@ -6,7 +6,7 @@ Un sistema di Retrieval-Augmented Generation (RAG) modulare che integra tecniche
 ### 🏗️ Architettura Modulare
 ```
 src/
-├── document_processing/    # Docling processor
+├── document_processing/    # PDF processor (PyPDF2)
 ├── chunking/              # Semantic chunking
 ├── query_handling/        # HyPE processor
 ├── retrieval/             # Fusion retrieval
@@ -35,17 +35,13 @@ OPENAI_API_KEY=your_openai_api_key_here
 GOOGLE_API_KEY=your_google_gemini_api_key_here
 ```
 
-### 4.Installa Docling
-Per il processing avanzato dei PDF:
-```bash
-pip install docling
-```
+Nota: il processing dei PDF è effettuato con PyPDF2 (Docling non è richiesto).
 
 ## 📋 Flusso di Esecuzione
 
 ### 0. Document Processing
-- **Input**: PDF, DOCX, TXT, MD
-- **Processo**: Docling converte documenti in Markdown strutturato
+- **Input**: PDF, TXT, MD
+- **Processo**: Estrazione testo con PyPDF2 e conversione in Markdown semplice
 - **Output**: Documenti processati con metadati
 
 ### 1. Semantic Chunking

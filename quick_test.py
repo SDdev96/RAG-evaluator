@@ -18,8 +18,8 @@ def test_imports():
         from config.config import get_default_config
         print("✅ Config module")
         
-        from src.document_processing.docling_processor import create_processor
-        print("✅ Document processing module")
+        from src.document_processing import create_processor
+        print("✅ Document processing module (PyPDF2)")
         
         from src.chunking.semantic_chunker import create_semantic_chunker
         print("✅ Semantic chunking module")
@@ -94,7 +94,7 @@ def test_document_processing():
     print("\n📄 Testing document processing...")
     
     try:
-        from src.document_processing.docling_processor import create_processor
+        from src.document_processing import create_processor
         from config.config import DocumentProcessingConfig
         
         # Controlla se esiste il PDF di test
