@@ -79,147 +79,135 @@ class AdvancedSemanticChunker:
         try:
             # Crea i documenti usando il semantic chunker
             documents = self.text_splitter.create_documents([text])
-            
-            chunks = []
-            current_index = 0
-            total_length = 0
-            
-            for i, doc in enumerate(documents):
-                chunk_content = doc.page_content
-                
-                # Calcola gli indici di inizio e fine
-                start_index = current_index
-                end_index = start_index + len(chunk_content)
-                current_index = end_index
-                
-                # Verifica dimensioni del chunk
-                if len(chunk_content) < self.config.min_chunk_size:
-                    total_length += len(chunk_content)
-                    self.logger.warning(f"Chunk {i} troppo piccolo ({len(chunk_content)} caratteri). Lunghezza totale: {total_length}")
-                    continue
-                
-                if len(chunk_content) > self.config.max_chunk_size:
-                    total_length += len(chunk_content)
-                    self.logger.warning(f"Chunk {i} troppo grande ({len(chunk_content)} caratteri). Lunghezza totale: {total_length}")
-                    # Suddivide ulteriormente il chunk se necessario
-                    sub_chunks = self._split_large_chunk(chunk_content, i, start_index, metadata)
-                    chunks.extend(sub_chunks)
+
+            # Adattamento dimensioni: fondi i troppo piccoli, dividi i troppo grandi
+            chunks: List[SemanticChunk] = []
+            pending_content = ""
+            pending_start_index = 0
+            running_index = 0
+
+            min_size = self.config.min_chunk_size
+            max_size = self.config.max_chunk_size
+
+            def emit(content: str, start_idx: int, idx: int):
+                chunk = SemanticChunk(
+                    content=content,
+                    metadata={
+                        **metadata,
+                        "chunk_index": idx,
+                        "chunk_size": len(content),
+                        "chunking_method": "semantic",
+                        "breakpoint_type": self.config.breakpoint_threshold_type,
+                    },
+                    chunk_id=f"chunk_{idx}",
+                    start_index=start_idx,
+                    end_index=start_idx + len(content),
+                )
+                chunks.append(chunk)
+
+            next_idx = 0
+
+            for doc in documents:
+                seg = doc.page_content
+                seg_len = len(seg)
+
+                if pending_content == "":
+                    pending_start_index = running_index
+
+                candidate = pending_content + seg if pending_content else seg
+                cand_len = len(candidate)
+
+                if cand_len < min_size:
+                    # Accumula per fondere con il prossimo segmento
+                    pending_content = candidate
+                elif cand_len <= max_size:
+                    # Dimensione ok: emetti direttamente
+                    emit(candidate, pending_start_index, next_idx)
+                    next_idx += 1
+                    pending_content = ""
                 else:
-                    total_length += len(chunk_content)
-                    self.logger.warning(f"Chunk {i} nella media ({len(chunk_content)} caratteri). Lunghezza totale: {total_length}")
-                    # Crea il chunk semantico
-                    chunk = SemanticChunk(
-                        content=chunk_content,
-                        metadata={
-                            **metadata,
-                            "chunk_index": i,
-                            "chunk_size": len(chunk_content),
-                            "chunking_method": "semantic",
-                            "breakpoint_type": self.config.breakpoint_threshold_type
-                        },
-                        chunk_id=f"chunk_{i}",
-                        start_index=start_index,
-                        end_index=end_index
-                    )
-                    chunks.append(chunk)
-            
-            self.logger.info(f"Creati {len(chunks)} chunks semantici")
+                    # Troppo grande: dividi rispettando [min,max] e confini di frase
+                    parts = self._split_text_by_size(candidate, min_size, max_size)
+                    # Emetti tutte le parti tranne l'ultima
+                    for part in parts[:-1]:
+                        emit(part, pending_start_index, next_idx)
+                        next_idx += 1
+                        pending_start_index += len(part)
+                    # Gestisci l'ultima parte: se è piccola, tienila in pending
+                    last = parts[-1]
+                    if len(last) >= min_size:
+                        emit(last, pending_start_index, next_idx)
+                        next_idx += 1
+                        pending_content = ""
+                        pending_start_index += len(last)
+                    else:
+                        pending_content = last
+
+                running_index += seg_len
+
+            # Se rimane un resto piccolo, fondilo con l'ultimo chunk
+            if pending_content:
+                if chunks:
+                    last_chunk = chunks[-1]
+                    last_chunk.content = last_chunk.content + pending_content
+                    last_chunk.end_index = last_chunk.start_index + len(last_chunk.content)
+                    last_chunk.metadata["chunk_size"] = len(last_chunk.content)
+                else:
+                    emit(pending_content, pending_start_index, next_idx)
+
+            self.logger.info(
+                f"Creati {len(chunks)} chunks semantici (adattati tra {min_size} e {max_size} caratteri)"
+            )
             return chunks
-            
+
         except Exception as e:
             self.logger.error(f"Errore nel chunking semantico: {e}")
-            # Fallback al chunking tradizionale
-            return self._fallback_chunking(text, metadata)
+            raise
     
-    def _split_large_chunk(self, content: str, base_index: int, base_start_index: int, 
-                          metadata: Dict[str, Any]) -> List[SemanticChunk]:
-        """Suddivide un chunk troppo grande in chunks più piccoli"""
-        chunks = []
-        chunk_size = self.config.max_chunk_size
-        overlap = min(200, chunk_size // 10)  # 10% di overlap
-        
-        current_pos = 0
-        sub_chunk_index = 0
-        
-        while current_pos < len(content):
-            end_pos = min(current_pos + chunk_size, len(content))
-            
-            # Cerca un punto di divisione naturale (fine frase)
-            if end_pos < len(content):
-                # Cerca l'ultimo punto, punto esclamativo o punto interrogativo
-                for punct in ['. ', '! ', '? ', '.\n', '!\n', '?\n']:
-                    last_punct = content.rfind(punct, current_pos, end_pos)
-                    if last_punct != -1:
-                        end_pos = last_punct + len(punct)
-                        break
-            
-            chunk_content = content[current_pos:end_pos].strip()
-            
-            if chunk_content:
-                chunk = SemanticChunk(
-                    content=chunk_content,
-                    metadata={
-                        **metadata,
-                        "chunk_index": f"{base_index}_{sub_chunk_index}",
-                        "chunk_size": len(chunk_content),
-                        "chunking_method": "semantic_split",
-                        "parent_chunk": base_index
-                    },
-                    chunk_id=f"chunk_{base_index}_{sub_chunk_index}",
-                    start_index=base_start_index + current_pos,
-                    end_index=base_start_index + end_pos
-                )
-                chunks.append(chunk)
-                sub_chunk_index += 1
-            
-            # Avanza con overlap
-            current_pos = end_pos - overlap if end_pos < len(content) else end_pos
-        
-        return chunks
-    
-    def _fallback_chunking(self, text: str, metadata: Dict[str, Any]) -> List[SemanticChunk]:
-        """Chunking di fallback quando il semantic chunking fallisce"""
-        self.logger.warning("Usando chunking di fallback")
-        
-        chunks = []
-        chunk_size = 1000
-        overlap = 200
-        
-        current_pos = 0
-        chunk_index = 0
-        
-        while current_pos < len(text):
-            end_pos = min(current_pos + chunk_size, len(text))
-            
-            # Cerca un punto di divisione naturale
-            if end_pos < len(text):
-                for punct in ['. ', '! ', '? ', '.\n', '!\n', '?\n']:
-                    last_punct = text.rfind(punct, current_pos, end_pos)
-                    if last_punct != -1:
-                        end_pos = last_punct + len(punct)
-                        break
-            
-            chunk_content = text[current_pos:end_pos].strip()
-            
-            if chunk_content:
-                chunk = SemanticChunk(
-                    content=chunk_content,
-                    metadata={
-                        **metadata,
-                        "chunk_index": chunk_index,
-                        "chunk_size": len(chunk_content),
-                        "chunking_method": "fallback"
-                    },
-                    chunk_id=f"fallback_chunk_{chunk_index}",
-                    start_index=current_pos,
-                    end_index=end_pos
-                )
-                chunks.append(chunk)
-                chunk_index += 1
-            
-            current_pos = end_pos - overlap if end_pos < len(text) else end_pos
-        
-        return chunks
+    def _split_text_by_size(self, content: str, min_size: int, max_size: int) -> List[str]:
+        """Divide content in parti tra min_size e max_size privilegiando confini di frase.
+        Se non trova confini adatti, taglia a max_size. L'ultima parte troppo piccola
+        viene fusa con la precedente.
+        """
+        parts: List[str] = []
+        pos = 0
+        n = len(content)
+
+        def find_split(end_limit: int, start_limit: int) -> int:
+            window = content[start_limit:end_limit]
+            candidates = [window.rfind(x) for x in [". ", "! ", "? ", ".\n", "!\n", "?\n", "\n\n"]]
+            best = max(candidates)
+            if best == -1:
+                return -1
+            # aggiungi 2 se separatore ha spazio dopo il punto
+            return start_limit + best + (2 if window[best:best+2] in [". ", "! ", "? "] else 1)
+
+        while pos < n:
+            end = min(pos + max_size, n)
+            length = end - pos
+            if min_size <= length <= max_size:
+                split_at = find_split(end, pos + min_size)
+                if split_at != -1:
+                    parts.append(content[pos:split_at].strip())
+                    pos = split_at
+                else:
+                    parts.append(content[pos:end].strip())
+                    pos = end
+                continue
+
+            split_at = find_split(end, pos + min_size)
+            if split_at != -1 and split_at - pos >= min_size:
+                parts.append(content[pos:split_at].strip())
+                pos = split_at
+            else:
+                hard_end = pos + max_size
+                parts.append(content[pos:hard_end].strip())
+                pos = hard_end
+
+        if len(parts) >= 2 and len(parts[-1]) < min_size:
+            parts[-2] = (parts[-2] + parts[-1]).strip()
+            parts.pop()
+        return [p for p in parts if p]
     
     def chunk_documents(self, documents: List[str], 
                        documents_metadata: Optional[List[Dict[str, Any]]] = None) -> List[SemanticChunk]:
