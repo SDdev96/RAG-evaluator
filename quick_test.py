@@ -53,7 +53,7 @@ def test_api_keys():
     
     from src.utils.helpers import validate_api_keys
     
-    required_keys = ["COHERE_API_KEY", "GOOGLE_API_KEY"]
+    required_keys = ["GOOGLE_API_KEY"]
     validation = validate_api_keys(required_keys)
     
     all_valid = True
@@ -243,13 +243,10 @@ def main():
         print("\n❌ Test fallito: problemi con document processing")
         sys.exit(1)
     
-    # Test semantic chunking (solo se abbiamo Cohere API key)
-    if os.getenv("COHERE_API_KEY"):
-        chunk_ok, chunks = test_semantic_chunking(processed_doc)
-        if not chunk_ok:
-            print("\n⚠️ Warning: problemi con semantic chunking")
-    else:
-        print("\n⚠️ Skipping semantic chunking test (no Cohere API key)")
+    # Test semantic chunking
+    chunk_ok, chunks = test_semantic_chunking(processed_doc)
+    if not chunk_ok:
+        print("\n⚠️ Warning: problemi con semantic chunking")
     
     # Test basic pipeline
     pipeline_ok, pipeline = test_basic_pipeline()
@@ -265,7 +262,7 @@ def main():
     print(f"{'✅' if api_keys_ok else '⚠️'} API Keys: {'OK' if api_keys_ok else 'Parziale'}")
     print("✅ Configuration: OK")
     print("✅ Document Processing: OK")
-    print(f"{'✅' if os.getenv('COHERE_API_KEY') else '⚠️'} Semantic Chunking: {'OK' if os.getenv('COHERE_API_KEY') else 'Skipped'}")
+    print("✅ Semantic Chunking: OK" if chunk_ok else "⚠️ Semantic Chunking: Issues")
     print("✅ Pipeline Initialization: OK")
     
     if api_keys_ok:
@@ -275,8 +272,9 @@ def main():
     else:
         print("\n⚠️ Test base superati, ma configura le API keys per funzionalità complete.")
         print("\nConfigura nel file .env:")
-        print("  COHERE_API_KEY=your_key_here")
         print("  GOOGLE_API_KEY=your_key_here")
+        print("  # Opzionale per Hugging Face (modelli privati o limiti più alti):")
+        print("  HUGGINGFACEHUB_API_TOKEN=your_hf_token_here")
     
     print("\n📚 Per maggiori informazioni consulta il README.md")
 

@@ -31,8 +31,10 @@ pip install -r requirements.txt
 ### 3. Configura le API Keys
 Crea un file `.env` nella root del progetto:
 ```env
-COHERE_API_KEY=your_cohere_api_key_here
 GOOGLE_API_KEY=your_google_gemini_api_key_here
+
+# Opzionale (per modelli privati Hugging Face o limiti più alti):
+HUGGINGFACEHUB_API_TOKEN=your_hf_token_here
 ```
 
 Nota: il processing dei PDF è effettuato con PyPDF2 (Docling non è richiesto).

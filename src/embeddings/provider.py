@@ -7,14 +7,15 @@ import os
 import threading
 from dataclasses import dataclass
 from typing import List, Optional
-from langchain_cohere import CohereEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
 
 @dataclass
 class EmbeddingsConfig:
     """Configurazione per il provider di embeddings"""
-    provider: str = "cohere" 
-    model: str = "embed-multilingual-light-v3.0"
-    api_key_env: str = "COHERE_API_KEY"
+    provider: str = "huggingface"
+    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    api_key_env: str = "HF_TOKEN"
 
 class EmbeddingsProvider:
     """
@@ -29,7 +30,7 @@ class EmbeddingsProvider:
 
     def __init__(self, config: EmbeddingsConfig):
         self.config = config
-        self._lc_embeddings: Optional[CohereEmbeddings] = None
+        self._lc_embeddings: Optional[Embeddings] = None
 
     @classmethod
     def get(cls, config: EmbeddingsConfig) -> EmbeddingsProvider:
@@ -43,13 +44,8 @@ class EmbeddingsProvider:
         if self._lc_embeddings is not None:
             return
         api_key = os.getenv(self.config.api_key_env)
-        if not api_key:
-            raise ValueError(
-                f"API key non trovata in env var {self.config.api_key_env} per embeddings {self.config.provider}"
-            )
-        if self.config.provider == "cohere":
-            # LangChain community wrapper per Cohere
-            self._lc_embeddings = CohereEmbeddings(model=self.config.model, cohere_api_key=api_key)
+        if self.config.provider in ("huggingface", "hf", "sentence-transformers"):
+            self._lc_embeddings = HuggingFaceEmbeddings(model_name=self.config.model)
         else:
             raise NotImplementedError(f"Provider embeddings non supportato: {self.config.provider}")
 

@@ -60,9 +60,9 @@ class GenerationConfig:
 @dataclass
 class EmbeddingsSystemConfig:
     """Configurazione per il provider di embeddings centralizzato"""
-    provider: str = "cohere"
-    model: str = "embed-multilingual-light-v3.0"
-    api_key_env: str = "COHERE_API_KEY"
+    provider: str = "huggingface"
+    model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    api_key_env: str = "HF_TOKEN"
 
 
 @dataclass
@@ -76,7 +76,6 @@ class RAGConfig:
     embeddings: EmbeddingsSystemConfig = None
     
     # API Keys
-    cohere_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
     
     # Paths
@@ -85,7 +84,6 @@ class RAGConfig:
     
     def __post_init__(self):
         # Carica le API keys dalle variabili d'ambiente
-        self.cohere_api_key = os.getenv("COHERE_API_KEY")
         self.google_api_key = os.getenv("GOOGLE_API_KEY")
         
         # Inizializza embeddings config se non fornita
