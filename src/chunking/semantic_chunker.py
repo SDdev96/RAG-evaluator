@@ -89,7 +89,11 @@ class AdvancedSemanticChunker:
             min_size = self.config.min_chunk_size
             max_size = self.config.max_chunk_size
 
+            # Totale caratteri emessi nei chunks finora (per logging)
+            total_emitted_chars = 0
+
             def emit(content: str, start_idx: int, idx: int):
+                nonlocal total_emitted_chars
                 chunk = SemanticChunk(
                     content=content,
                     metadata={
@@ -104,6 +108,11 @@ class AdvancedSemanticChunker:
                     end_index=start_idx + len(content),
                 )
                 chunks.append(chunk)
+                # Aggiorna e logga il totale dei caratteri emessi
+                total_emitted_chars += len(content)
+                self.logger.info(
+                    f"[Chunking] Emesso chunk_index={idx} size={len(content)} total_emitted={total_emitted_chars}"
+                )
 
             next_idx = 0
 
@@ -118,14 +127,17 @@ class AdvancedSemanticChunker:
                 cand_len = len(candidate)
 
                 if cand_len < min_size:
+                    self.logger.warning("Chunk troppo piccolo ")
                     # Accumula per fondere con il prossimo segmento
                     pending_content = candidate
                 elif cand_len <= max_size:
+                    self.logger.info("Chunk dimensione ok")
                     # Dimensione ok: emetti direttamente
                     emit(candidate, pending_start_index, next_idx)
                     next_idx += 1
                     pending_content = ""
                 else:
+                    self.logger.warning("Chunk troppo grande")
                     # Troppo grande: dividi rispettando [min,max] e confini di frase
                     parts = self._split_text_by_size(candidate, min_size, max_size)
                     # Emetti tutte le parti tranne l'ultima
@@ -152,6 +164,16 @@ class AdvancedSemanticChunker:
                     last_chunk.content = last_chunk.content + pending_content
                     last_chunk.end_index = last_chunk.start_index + len(last_chunk.content)
                     last_chunk.metadata["chunk_size"] = len(last_chunk.content)
+                    # Aggiorna il totale e logga l'operazione di fusione
+                    try:
+                        # total_emitted_chars esiste nello scope esterno a emit
+                        total_emitted_chars += len(pending_content)
+                        self.logger.info(
+                            f"[Chunking] Fuso resto con ultimo chunk - incremento={len(pending_content)} size_ultimo={len(last_chunk.content)} total_emitted={total_emitted_chars}"
+                        )
+                    except Exception:
+                        # In caso di differenze di scope, evita di interrompere il flusso
+                        self.logger.debug("[Chunking] Impossibile aggiornare il totale durante la fusione finale")
                 else:
                     emit(pending_content, pending_start_index, next_idx)
 

@@ -22,19 +22,19 @@ class DocumentProcessingConfig:
 class ChunkingConfig:
     """Configurazione per il semantic chunking"""
     breakpoint_threshold_type: str = "percentile"  # percentile, standard_deviation, interquartile
-    breakpoint_threshold_amount: int = 85
-    embedding_model: str = "embed-multilingual-light-v3.0"
-    min_chunk_size: int = 100
-    max_chunk_size: int = 2000
+    breakpoint_threshold_amount: int = 90
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    min_chunk_size: int = 150
+    max_chunk_size: int = 2100
 
 
 @dataclass
 class HyPEConfig:
     """Configurazione per HyPE (Hypothetical Prompt Embeddings)"""
-    num_hypothetical_questions: int = 3
+    num_hypothetical_questions: int = 1
     language_model: str = "gemini-1.5-flash"
-    embedding_model: str = "embed-multilingual-light-v3.0"
-    temperature: float = 0.7
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    temperature: float = 0.5
     max_tokens: int = 150
 
 
@@ -44,7 +44,7 @@ class FusionRetrievalConfig:
     vector_weight: float = 0.7  # alpha parameter
     bm25_weight: float = 0.3
     top_k: int = 5
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 @dataclass
