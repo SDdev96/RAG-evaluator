@@ -24,8 +24,8 @@ def setup_environment():
         console_output=True
     )
     
-    # Valida API keys
-    required_keys = ["COHERE_API_KEY", "GOOGLE_API_KEY"]
+    # Valida API keys (per default servono solo quelle di Google Gemini)
+    required_keys = ["GOOGLE_API_KEY"]
     api_validation = validate_api_keys(required_keys)
     
     missing_keys = [key for key, valid in api_validation.items() if not valid]
