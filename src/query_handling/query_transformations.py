@@ -33,13 +33,25 @@ class QueryTransformer:
         variants.append(base)
 
         if self.config.enable_decompose:
-            variants.extend(self._decompose(base))
+            decomposed = self._decompose(base)
+            # Log e stampa in console delle sotto-domande decomposte
+            self.logger.info(f"Decompose: generate {len(decomposed)} varianti -> {decomposed}")
+            print(f"[QueryTransform] Decompose ({len(decomposed)}): {decomposed}")
+            variants.extend(decomposed)
 
         if self.config.enable_rewrite:
-            variants.extend(self._rewrite(base))
+            rewritten = self._rewrite(base)
+            # Log e stampa in console delle riformulazioni
+            self.logger.info(f"Rewrite: generate {len(rewritten)} varianti -> {rewritten}")
+            print(f"[QueryTransform] Rewrite ({len(rewritten)}): {rewritten}")
+            variants.extend(rewritten)
 
         if self.config.enable_expand:
-            variants.extend(self._expand(base))
+            expanded = self._expand(base)
+            # Log e stampa in console delle espansioni
+            self.logger.info(f"Expand: generate {len(expanded)} varianti -> {expanded}")
+            print(f"[QueryTransform] Expand ({len(expanded)}): {expanded}")
+            variants.extend(expanded)
 
         # Normalizza: rimuovi duplicati, vuoti, limita a max_transformations
         cleaned = []
@@ -53,7 +65,7 @@ class QueryTransformer:
         if self.config.max_transformations > 0:
             cleaned = cleaned[: self.config.max_transformations]
 
-        self.logger.debug(f"Generate {len(cleaned)} varianti di query")
+        self.logger.info(f"Generate {len(cleaned)} varianti di query")
         return cleaned
 
     def _decompose(self, query: str) -> List[str]:

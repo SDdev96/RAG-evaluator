@@ -31,10 +31,10 @@ class ChunkingConfig:
 @dataclass
 class QueryTransformationsConfig:
     """Configurazione per Query Transformations"""
-    enable_decompose: bool = False
+    enable_decompose: bool = True
     enable_rewrite: bool = True
     enable_expand: bool = True
-    max_transformations: int = 5
+    max_transformations: int = 3
     language: str = "it"
 
 
