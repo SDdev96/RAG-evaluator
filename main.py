@@ -12,7 +12,7 @@ load_dotenv()
 
 from config.config import get_default_config
 from src.pipeline.advanced_rag_pipeline import create_rag_pipeline
-from src.utils.logging_config import setup_logging
+from src.utils.logging_config import setup_logging, get_logger
 from src.utils.helpers import validate_api_keys
 
 
@@ -72,6 +72,9 @@ def interactive_mode(pipeline):
     print("  - 'quit' per uscire")
     print("-" * 60)
     
+    # Logger per scrivere anche su file nella cartella logs/
+    rag_logger = get_logger('rag_system')
+
     while True:
         try:
             user_input = input("\n🔍 > ").strip()
@@ -112,10 +115,24 @@ def interactive_mode(pipeline):
             
             if response.sources:
                 print(f"\n📚 Fonti principali:")
+                # Mappa chunk_id -> risultato di retrieval per accedere al contenuto
+                results_by_id = {r.chunk_id: r for r in getattr(response, 'retrieval_results', [])}
                 for i, source in enumerate(response.sources[:8], 1):
                     print(f"  {i}. {source}")
-            
+                    # Logga anche su file
+                    rag_logger.info(f"Fonte {i}: {source}")
+                    chunk = results_by_id.get(source)
+                    if chunk and getattr(chunk, 'content', None):
+                        # Mostra un estratto del contenuto per evitare output troppo lungo
+                        snippet = chunk.content.strip().replace('\n', ' ')
+                        score_info = f" (score: {getattr(chunk, 'score', 0):.3f})" if hasattr(chunk, 'score') else ""
+                        print(f"     └─ Estratto{score_info}: {snippet}")
+                        # E scrivilo anche nei log (snippet completo potrebbe essere lungo, quindi lo mettiamo a DEBUG)
+                        rag_logger.info(f"     └─ Estratto{score_info}: {snippet}")
+
             print(f"\n⏱️ Tempo: {response.processing_time:.2f}s")
+            # Logga tempo di elaborazione
+            rag_logger.info(f"Tempo elaborazione: {response.processing_time:.2f}s")
             
         except KeyboardInterrupt:
             break
