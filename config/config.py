@@ -34,7 +34,7 @@ class QueryTransformationsConfig:
     enable_decompose: bool = True
     enable_rewrite: bool = True
     enable_expand: bool = True
-    max_transformations: int = 3
+    max_transformations: int = 2
     language: str = "it"
 
 

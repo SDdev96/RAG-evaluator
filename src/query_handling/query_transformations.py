@@ -3,9 +3,12 @@ Query Transformations: tecniche per trasformare una domanda in varianti utili al
 Ispirato all'implementazione generale: NirDiamant/RAG_Techniques
 """
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 import logging
 import re
+import os
+
+import google.generativeai as genai
 
 from config.config import QueryTransformationsConfig
 
@@ -21,6 +24,7 @@ class QueryTransformer:
     def __init__(self, config: QueryTransformationsConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self._gemini_model = None  # lazy init
 
     def transform(self, query: str) -> List[str]:
         variants: List[str] = []
@@ -69,10 +73,26 @@ class QueryTransformer:
         return cleaned
 
     def _decompose(self, query: str) -> List[str]:
-        # Heuristica semplice: spezza su connettivi comuni
-        connectors = [
-            " e ", " ed ", " oppure ", " o ", " then ", " and ", " or ", "; ", ". ", ", "
-        ]
+        """Decomposizione tramite Gemini con fallback euristico."""
+        try:
+            prompt = (
+                """Sei un assistente AI incaricato di scomporre query complesse in sottoquery più semplici per un sistema RAG.
+        Data la query originale, scomponila in {self.config.max_transformations} sottoquery più semplici che, se risposte insieme, fornirebbero una risposta completa alla query originale.
+
+        Query originale: {original_query}
+
+
+        """
+            ).format(original_query=query)
+            response_text = self._gemini_generate(prompt)
+            if response_text:
+                subs = self._parse_numbered_list(response_text)
+                return [s for s in subs if s and s.lower() != query.lower()]
+        except Exception as e:
+            self.logger.warning(f"Fallback decomposizione euristica per errore Gemini: {e}")
+
+        # Fallback euristico: spezza su connettivi comuni
+        connectors = [" e ", " ed ", " oppure ", " o ", " then ", " and ", " or ", "; ", ". ", ", "]
         parts = [query]
         for c in connectors:
             if c in query:
@@ -81,18 +101,53 @@ class QueryTransformer:
         return [p for p in parts if len(p.split()) > 2 and p.lower() != query.lower()]
 
     def _rewrite(self, query: str) -> List[str]:
-        # Riformulazioni semplici via pattern
+        """Riformulazione tramite Gemini."""
+        try:
+            prompt = (
+                """Sei un assistente AI incaricato di riformulare le query degli utenti per migliorarne il recupero in un sistema RAG.
+    Data la query originale, riscrivila per renderla più specifica, dettagliata e in grado di recuperare informazioni rilevanti.
+
+
+        Query originale: {original_query}
+
+
+         Query riscritta:"""
+            ).format(original_query=query)
+            response_text = self._gemini_generate(prompt)
+            if response_text:
+                # Prendi la prima riga non vuota come riformulazione
+                lines = [l.strip("- *# ") for l in response_text.splitlines() if l.strip()]
+                if lines:
+                    return [lines[0]]
+        except Exception as e:
+            self.logger.warning(f"Fallback rewrite euristico per errore Gemini: {e}")
+
+        # Fallback semplice
         q = query.rstrip(" ?!.")
-        rewrites = [
-            f"Spiega {q}",
-            f"Descrivi {q}",
-            f"Dettagli su {q}",
-            f"Come funziona {q}?",
-        ]
-        return rewrites
+        return [f"Spiega {q}", f"Descrivi {q}", f"Dettagli su {q}", f"Come funziona {q}?"]
 
     def _expand(self, query: str) -> List[str]:
-        # Estrai potenziali keyword e crea query espanse
+        """Step-back tramite Gemini (query più generali)."""
+        try:
+            prompt = (
+                """Sei un assistente AI incaricato di generare query più ampie e generali per migliorare il recupero del contesto in un sistema RAG.
+        Data la query originale, genera una query step-back più generale che possa aiutare a recuperare informazioni di base rilevanti.
+
+
+        Query originale: {original_query}
+
+
+        Query step-back:"""
+            ).format(original_query=query)
+            response_text = self._gemini_generate(prompt)
+            if response_text:
+                lines = [l.strip("- *# ") for l in response_text.splitlines() if l.strip()]
+                if lines:
+                    return [lines[0]]
+        except Exception as e:
+            self.logger.warning(f"Fallback expand euristico per errore Gemini: {e}")
+
+        # Fallback: espansioni keyword-based
         tokens = re.findall(r"\b\w+\b", query.lower())
         keywords = [t for t in tokens if len(t) > 3]
         expansions: List[str] = []
@@ -101,6 +156,51 @@ class QueryTransformer:
             expansions.append(f"{query} problemi comuni")
             expansions.append(f"{query} esempio passo passo")
         return expansions
+
+    def _gemini_generate(self, prompt: str) -> Optional[str]:
+        """Esegue una chiamata a Gemini e restituisce il testo."""
+        model = self._get_gemini_model()
+        try:
+            resp = model.generate_content(prompt)
+            if hasattr(resp, "text") and resp.text:
+                return resp.text.strip()
+        except Exception as e:
+            self.logger.error(f"Errore chiamata Gemini: {e}")
+        return None
+
+    def _get_gemini_model(self):
+        """Inizializza pigramente il modello Gemini usando GOOGLE_API_KEY."""
+        if self._gemini_model is None:
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise ValueError("API key di Google non fornita (env GOOGLE_API_KEY)")
+            genai.configure(api_key=api_key)
+            # Modello leggero e veloce per trasformazioni
+            self._gemini_model = genai.GenerativeModel(
+                model_name="gemini-1.5-flash",
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.3,
+                    max_output_tokens=200,
+                    top_p=0.9,
+                    top_k=40,
+                ),
+            )
+            self.logger.info("Modello Gemini per QueryTransformations inizializzato (gemini-1.5-flash)")
+        return self._gemini_model
+
+    def _parse_numbered_list(self, text: str) -> List[str]:
+        """Parsa liste numerate in sottodomande."""
+        items: List[str] = []
+        for line in text.splitlines():
+            line = line.strip()
+            # match pattern tipo '1. domanda', '- domanda', '* domanda'
+            m = re.match(r"^(?:\d+\.|[-*])\s+(.*)$", line)
+            if m:
+                items.append(m.group(1).strip())
+        # Se non ha trovato pattern numerati, ritorna righe non vuote
+        if not items:
+            items = [l.strip("- *# ") for l in text.splitlines() if l.strip()]
+        return items
 
 
 def create_query_transformer(config: QueryTransformationsConfig) -> QueryTransformer:
