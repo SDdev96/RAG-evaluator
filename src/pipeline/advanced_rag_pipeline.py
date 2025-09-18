@@ -194,7 +194,7 @@ class AdvancedRAGPipeline:
             raise ValueError("Pipeline non inizializzata. Chiamare process_documents() prima.")
         
         start_time = datetime.now()
-        self.logger.info(f"Processando query: '{query[:100]}...'")
+        self.logger.info(f"Processando query: '{query}'")
         
         try:
             # Step 1: Query Transformations + Retrieval

@@ -171,7 +171,15 @@ Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla dom
         return prompt
     
     def _calculate_confidence(self, chunks: List[RetrievalResult], response) -> float:
-        """Calcola un punteggio di confidence per la risposta"""
+        """Calcola un punteggio di confidence per la risposta
+        
+        Args:
+            chunks: Lista di RetrievalResult
+            response: Risposta generata
+        
+        Returns:
+            float: Punteggio di confidence
+        """
         if not chunks:
             return 0.0
         

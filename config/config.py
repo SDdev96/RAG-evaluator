@@ -22,19 +22,19 @@ class DocumentProcessingConfig:
 class ChunkingConfig:
     """Configurazione per il semantic chunking"""
     breakpoint_threshold_type: str = "percentile"  # percentile, standard_deviation, interquartile
-    breakpoint_threshold_amount: int = 90
+    breakpoint_threshold_amount: int = 70
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    min_chunk_size: int = 150
-    max_chunk_size: int = 2100
+    min_chunk_size: int = 100
+    max_chunk_size: int = 2000
 
 
 @dataclass
 class QueryTransformationsConfig:
     """Configurazione per Query Transformations"""
-    enable_decompose: bool = True
-    enable_rewrite: bool = True
-    enable_expand: bool = True
-    max_transformations: int = 2
+    enable_decompose: bool = False
+    enable_rewrite: bool = False
+    enable_expand: bool = False
+    max_transformations: int = 3
     language: str = "it"
 
 

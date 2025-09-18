@@ -9,8 +9,9 @@ import re
 import os
 
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-from config.config import QueryTransformationsConfig
+from config.config import QueryTransformationsConfig, GenerationConfig
 
 
 class QueryTransformer:
@@ -75,15 +76,15 @@ class QueryTransformer:
     def _decompose(self, query: str) -> List[str]:
         """Decomposizione tramite Gemini con fallback euristico."""
         try:
+            n = max(1, int(self.config.max_transformations))
+            lang = getattr(self.config, "language", "it")
             prompt = (
-                """Sei un assistente AI incaricato di scomporre query complesse in sottoquery più semplici per un sistema RAG.
-        Data la query originale, scomponila in {self.config.max_transformations} sottoquery più semplici che, se risposte insieme, fornirebbero una risposta completa alla query originale.
-
-        Query originale: {original_query}
-
-
-        """
-            ).format(original_query=query)
+                f"Sei un assistente AI incaricato di scomporre query complesse in sottoquery più semplici per un sistema RAG.\n"
+                f"Data la query originale, scomponila in {n} sottoquery più semplici che, se risposte insieme, fornirebbero una risposta completa alla query originale.\n\n"
+                f"Query originale: {query}\n\n"
+                f"Rispondi in {lang}.\n"
+                f"Rispondi solo con un elenco numerato di {n} sottoquery, una per riga, senza testo aggiuntivo."
+            )
             response_text = self._gemini_generate(prompt)
             if response_text:
                 subs = self._parse_numbered_list(response_text)
@@ -103,16 +104,14 @@ class QueryTransformer:
     def _rewrite(self, query: str) -> List[str]:
         """Riformulazione tramite Gemini."""
         try:
+            lang = getattr(self.config, "language", "it")
             prompt = (
-                """Sei un assistente AI incaricato di riformulare le query degli utenti per migliorarne il recupero in un sistema RAG.
-    Data la query originale, riscrivila per renderla più specifica, dettagliata e in grado di recuperare informazioni rilevanti.
-
-
-        Query originale: {original_query}
-
-
-         Query riscritta:"""
-            ).format(original_query=query)
+                "Sei un assistente AI incaricato di riformulare le query degli utenti per migliorarne il recupero in un sistema RAG.\n"
+                "Data la query originale, riscrivila per renderla più specifica, dettagliata e in grado di recuperare informazioni rilevanti.\n\n"
+                f"Query originale: {query}\n\n"
+                f"Rispondi in {lang}.\n"
+                "Query riscritta:"
+            )
             response_text = self._gemini_generate(prompt)
             if response_text:
                 # Prendi la prima riga non vuota come riformulazione
@@ -129,16 +128,14 @@ class QueryTransformer:
     def _expand(self, query: str) -> List[str]:
         """Step-back tramite Gemini (query più generali)."""
         try:
+            lang = getattr(self.config, "language", "it")
             prompt = (
-                """Sei un assistente AI incaricato di generare query più ampie e generali per migliorare il recupero del contesto in un sistema RAG.
-        Data la query originale, genera una query step-back più generale che possa aiutare a recuperare informazioni di base rilevanti.
-
-
-        Query originale: {original_query}
-
-
-        Query step-back:"""
-            ).format(original_query=query)
+                "Sei un assistente AI incaricato di generare query più ampie e generali per migliorare il recupero del contesto in un sistema RAG.\n"
+                "Data la query originale, genera una query step-back più generale che possa aiutare a recuperare informazioni di base rilevanti.\n\n"
+                f"Query originale: {query}\n\n"
+                f"Rispondi in {lang}.\n"
+                "Query step-back:"
+            )
             response_text = self._gemini_generate(prompt)
             if response_text:
                 lines = [l.strip("- *# ") for l in response_text.splitlines() if l.strip()]
@@ -175,17 +172,24 @@ class QueryTransformer:
             if not api_key:
                 raise ValueError("API key di Google non fornita (env GOOGLE_API_KEY)")
             genai.configure(api_key=api_key)
-            # Modello leggero e veloce per trasformazioni
+            # Usa la stessa configurazione del generatore per coerenza
+            gcfg = GenerationConfig()
             self._gemini_model = genai.GenerativeModel(
-                model_name="gemini-1.5-flash",
+                model_name=gcfg.model_name,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.3,
-                    max_output_tokens=200,
-                    top_p=0.9,
-                    top_k=40,
+                    temperature=gcfg.temperature,
+                    max_output_tokens=min(300, gcfg.max_tokens),
+                    top_p=gcfg.top_p,
+                    top_k=gcfg.top_k,
                 ),
+                safety_settings={
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+                },
             )
-            self.logger.info("Modello Gemini per QueryTransformations inizializzato (gemini-1.5-flash)")
+            self.logger.info(f"Modello Gemini per QueryTransformations inizializzato ({gcfg.model_name})")
         return self._gemini_model
 
     def _parse_numbered_list(self, text: str) -> List[str]:
