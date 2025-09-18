@@ -105,14 +105,14 @@ def interactive_mode(pipeline):
             
             # Esegui query normale
             print("🤔 Elaborando...")
-            response = pipeline.query(user_input, top_k=3)
+            response = pipeline.query(user_input, top_k=8)
             
             print(f"\n🎯 Risposta (Confidence: {response.confidence:.2f}):")
             print(response.answer)
             
             if response.sources:
                 print(f"\n📚 Fonti principali:")
-                for i, source in enumerate(response.sources[:3], 1):
+                for i, source in enumerate(response.sources[:8], 1):
                     print(f"  {i}. {source}")
             
             print(f"\n⏱️ Tempo: {response.processing_time:.2f}s")
@@ -142,7 +142,7 @@ def batch_mode(pipeline, queries_file):
         
         print(f"🔄 Processando {len(queries)} query da {queries_file}")
         
-        responses = pipeline.batch_query(queries, top_k=3)
+        responses = pipeline.batch_query(queries, top_k=8)
         
         # Salva risultati
         output_file = queries_path.with_suffix('.results.txt')

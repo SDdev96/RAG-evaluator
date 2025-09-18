@@ -8,10 +8,9 @@ from dataclasses import dataclass
 
 import faiss
 from rank_bm25 import BM25Okapi
-from langchain.schema import Document
 
 from config.config import FusionRetrievalConfig
-from src.query_handling.hype_processor import EnrichedChunk
+from src.chunking.semantic_chunker import SemanticChunk
 from src.embeddings.provider import EmbeddingsProvider
 
 
@@ -45,29 +44,26 @@ class FusionRetriever:
         
         self.logger.info("Fusion Retriever inizializzato")
     
-    def build_indices(self, enriched_chunks: List[EnrichedChunk]):
+    def build_indices(self, chunks: List[SemanticChunk]):
         """
-        Costruisce gli indici vettoriale e BM25 dai chunks arricchiti
+        Costruisce gli indici vettoriale e BM25 dai chunks semantici
         
         Args:
-            enriched_chunks: Lista di chunks arricchiti con domande ipotetiche
+            chunks: Lista di chunks semantici
         """
-        self.logger.info(f"Costruendo indici per {len(enriched_chunks)} chunks")
+        self.logger.info(f"Costruendo indici per {len(chunks)} chunks")
         
         # Prepara i dati
         all_embeddings = []
         all_texts = []
         chunk_mappings = []
         
-        for chunk_idx, enriched_chunk in enumerate(enriched_chunks):
-            chunk = enriched_chunk.original_chunk
-            
-            # Aggiungi embedding del contenuto originale del chunk
+        for chunk_idx, chunk in enumerate(chunks):
             try:
                 chunk_embedding = self.embeddings_provider.embed_query(chunk.content)
                 all_embeddings.append(chunk_embedding)
                 all_texts.append(chunk.content)
-                
+
                 chunk_mappings.append({
                     "chunk_id": chunk.chunk_id,
                     "chunk_index": chunk_idx,
@@ -75,28 +71,6 @@ class FusionRetriever:
                     "metadata": chunk.metadata,
                     "type": "original_chunk"
                 })
-                
-                # Aggiungi embeddings delle domande ipotetiche
-                for q_idx, (question, embedding) in enumerate(
-                    zip(enriched_chunk.hypothetical_questions, enriched_chunk.embeddings)
-                ):
-                    if embedding and len(embedding) > 0:
-                        all_embeddings.append(embedding)
-                        all_texts.append(question.question)
-                        
-                        chunk_mappings.append({
-                            "chunk_id": chunk.chunk_id,
-                            "chunk_index": chunk_idx,
-                            "content": chunk.content,  # Contenuto originale del chunk
-                            "metadata": {
-                                **chunk.metadata,
-                                "hypothetical_question": question.question,
-                                "question_confidence": question.confidence,
-                                "question_index": q_idx
-                            },
-                            "type": "hypothetical_question"
-                        })
-                
             except Exception as e:
                 self.logger.error(f"Errore nel processare chunk {chunk.chunk_id}: {e}")
                 continue
@@ -183,6 +157,42 @@ class FusionRetriever:
         
         self.logger.debug(f"Restituiti {len(fusion_results)} risultati fusion")
         return fusion_results
+
+    def retrieve_multi(self, queries: List[str], top_k: Optional[int] = None) -> List[RetrievalResult]:
+        """Esegue retrieval combinando molteplici query (query transformations).
+
+        Per ciascuna query esegue ricerca vettoriale e BM25 e combina i risultati
+        aggregando gli score (max per tipo e poi media pesata).
+        """
+        if top_k is None:
+            top_k = self.config.top_k
+
+        if not queries:
+            return []
+
+        # Accumula risultati per indice
+        vector_acc: Dict[int, float] = {}
+        bm25_acc: Dict[int, float] = {}
+
+        for q in queries:
+            vec = self._vector_search(q, top_k * 2)
+            bm = self._bm25_search(q, top_k * 2)
+
+            # Normalizza singolarmente per query per rendere comparabili
+            vec_scores = self._normalize_scores([s for _, s in vec])
+            bm_scores = self._normalize_scores([s for _, s in bm])
+
+            for (idx, _), ns in zip(vec, vec_scores):
+                vector_acc[idx] = max(vector_acc.get(idx, 0.0), ns)
+            for (idx, _), ns in zip(bm, bm_scores):
+                bm25_acc[idx] = max(bm25_acc.get(idx, 0.0), ns)
+
+        # Converti in liste
+        vector_results = list(vector_acc.items())
+        bm25_results = list(bm25_acc.items())
+
+        # Riusa combinazione esistente
+        return self._combine_results(vector_results, bm25_results, top_k)
     
     def _vector_search(self, query: str, k: int) -> List[Tuple[int, float]]:
         """Esegue ricerca vettoriale"""

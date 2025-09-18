@@ -2,7 +2,7 @@
 Pipeline RAG avanzata che integra tutte le tecniche:
 - Document Processing (Docling)
 - Semantic Chunking
-- HyPE (Hypothetical Prompt Embeddings)
+- Query Transformations (al posto di HyPE)
 - Fusion Retrieval
 - Gemini Generation
 """
@@ -17,7 +17,7 @@ from datetime import datetime
 from config.config import RAGConfig, get_default_config
 from src.document_processing.document_processor import DocumentProcessor, ProcessedDocument
 from src.chunking.semantic_chunker import AdvancedSemanticChunker, SemanticChunk
-from src.query_handling.hype_processor import HyPEProcessor, EnrichedChunk
+from src.query_handling.query_transformations import QueryTransformer
 from src.retrieval.fusion_retriever import FusionRetriever, RetrievalResult
 from src.generation.gemini_generator import GeminiGenerator, GenerationResult
 from src.embeddings.provider import EmbeddingsProvider
@@ -41,7 +41,6 @@ class PipelineState:
     """Stato della pipeline per caching e debugging"""
     processed_documents: List[ProcessedDocument]
     semantic_chunks: List[SemanticChunk]
-    enriched_chunks: List[EnrichedChunk]
     indices_built: bool
     last_updated: datetime
 
@@ -75,8 +74,8 @@ class AdvancedRAGPipeline:
 
             self.chunker = AdvancedSemanticChunker(self.config.chunking, self.embeddings_provider)
             
-            # HyPE Processor
-            self.hype_processor = HyPEProcessor(self.config.hype, self.embeddings_provider)
+            # Query Transformer
+            self.query_transformer = QueryTransformer(self.config.query_transformations)
             
             # Fusion Retriever
             self.retriever = FusionRetriever(self.config.fusion_retrieval, self.embeddings_provider)
@@ -118,7 +117,7 @@ class AdvancedRAGPipeline:
         start_time = datetime.now()
         
         # Step 1: Document Processing
-        self.logger.info("Step 1: Document Processing con Docling")
+        self.logger.info("Step 1: Document Processing con PyPDF2")
         processed_docs = []
         
         for doc_path in document_paths:
@@ -155,19 +154,14 @@ class AdvancedRAGPipeline:
             except Exception as e:
                 self.logger.error(f"Errore nel chunking di {doc.source_path}: {e}")
         
-        # Step 3: HyPE Processing
-        self.logger.info("Step 3: HyPE Processing (Hypothetical Prompt Embeddings)")
-        enriched_chunks = self.hype_processor.process_chunks(all_chunks, use_parallel=True)
-        
-        # Step 4: Build Retrieval Indices
-        self.logger.info("Step 4: Costruzione indici per Fusion Retrieval")
-        self.retriever.build_indices(enriched_chunks)
+        # Step 3: Costruzione indici per Retrieval (usa direttamente i chunks)
+        self.logger.info("Step 3: Costruzione indici per Fusion Retrieval")
+        self.retriever.build_indices(all_chunks)
         
         # Salva lo stato
         self.state = PipelineState(
             processed_documents=processed_docs,
             semantic_chunks=all_chunks,
-            enriched_chunks=enriched_chunks,
             indices_built=True,
             last_updated=datetime.now()
         )
@@ -203,8 +197,10 @@ class AdvancedRAGPipeline:
         self.logger.info(f"Processando query: '{query[:100]}...'")
         
         try:
-            # Step 1: Retrieval
-            retrieval_results = self.retriever.retrieve(query, top_k)
+            # Step 1: Query Transformations + Retrieval
+            variants = self.query_transformer.transform(query)
+            queries_for_retrieval = variants if variants else [query]
+            retrieval_results = self.retriever.retrieve_multi(queries_for_retrieval, top_k)
             
             if not retrieval_results:
                 self.logger.warning("Nessun risultato trovato per la query")
@@ -229,7 +225,7 @@ class AdvancedRAGPipeline:
                 metadata.update({
                     "retrieval_stats": self.retriever.get_retrieval_statistics(retrieval_results),
                     "chunking_stats": self.chunker.get_chunk_statistics(self.state.semantic_chunks),
-                    "hype_stats": self.hype_processor.get_processing_statistics(self.state.enriched_chunks)
+                    "query_variants": variants,
                 })
             
             # Crea risposta
@@ -270,20 +266,19 @@ class AdvancedRAGPipeline:
     
     def get_document_summary(self, summary_type: str = "comprehensive") -> GenerationResult:
         """Genera un riassunto di tutti i documenti processati"""
-        if not self.state or not self.state.enriched_chunks:
+        if not self.state or not self.state.semantic_chunks:
             raise ValueError("Nessun documento processato")
         
         # Seleziona i chunk più rappresentativi
         top_chunks = []
-        for enriched_chunk in self.state.enriched_chunks[:10]:  # Top 10 chunks
-            # Crea un RetrievalResult fittizio per il summary
+        for chunk in self.state.semantic_chunks[:10]:  # Top 10 chunks
             result = RetrievalResult(
-                chunk_id=enriched_chunk.original_chunk.chunk_id,
-                content=enriched_chunk.original_chunk.content,
+                chunk_id=chunk.chunk_id,
+                content=chunk.content,
                 score=1.0,
                 vector_score=1.0,
                 bm25_score=1.0,
-                metadata=enriched_chunk.original_chunk.metadata,
+                metadata=chunk.metadata,
                 rank=len(top_chunks) + 1
             )
             top_chunks.append(result)
@@ -340,8 +335,8 @@ class AdvancedRAGPipeline:
                     self.state = pickle.load(f)
                 
                 # Ricostruisci gli indici
-                if self.state.enriched_chunks:
-                    self.retriever.build_indices(self.state.enriched_chunks)
+                if self.state.semantic_chunks:
+                    self.retriever.build_indices(self.state.semantic_chunks)
                     self.state.indices_built = True
                 
                 self.logger.info("Cache caricata con successo")
@@ -369,11 +364,6 @@ class AdvancedRAGPipeline:
         stats = {
             "documenti_processati": len(self.state.processed_documents),
             "chunks_semantici": len(self.state.semantic_chunks),
-            "chunks_arricchiti": len(self.state.enriched_chunks),
-            "domande_ipotetiche_totali": sum(
-                len(chunk.hypothetical_questions) 
-                for chunk in self.state.enriched_chunks
-            )
         }
         
         self.logger.info("=== STATISTICHE PROCESSING ===")

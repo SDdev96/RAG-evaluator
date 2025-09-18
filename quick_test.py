@@ -24,8 +24,8 @@ def test_imports():
         from src.chunking.semantic_chunker import create_semantic_chunker
         print("✅ Semantic chunking module")
         
-        from src.query_handling.hype_processor import create_hype_processor
-        print("✅ HyPE module")
+        from src.query_handling.query_transformations import create_query_transformer
+        print("✅ Query Transformations module")
         
         from src.retrieval.fusion_retriever import create_fusion_retriever
         print("✅ Fusion retrieval module")
@@ -78,7 +78,7 @@ def test_configuration():
         print(f"✅ Configurazione caricata")
         print(f"  - Document processing: {config.document_processing.input_dir}")
         print(f"  - Chunking method: {config.chunking.breakpoint_threshold_type}")
-        print(f"  - HyPE questions: {config.hype.num_hypothetical_questions}")
+        print(f"  - Query transformations: decompose={config.query_transformations.enable_decompose}, rewrite={config.query_transformations.enable_rewrite}, expand={config.query_transformations.enable_expand}")
         print(f"  - Fusion weights: {config.fusion_retrieval.vector_weight}/{config.fusion_retrieval.bm25_weight}")
         print(f"  - Generation model: {config.generation.model_name}")
         
@@ -199,14 +199,14 @@ def test_basic_pipeline():
         config = get_default_config()
         
         # Modifica config per test più veloce
-        config.hype.num_hypothetical_questions = 1  # Riduci per test
+        config.query_transformations.max_transformations = 3  # Riduci per test
         
         pipeline = create_rag_pipeline(config)
         
         print("✅ Pipeline inizializzata correttamente")
         print(f"  - Document processor: {type(pipeline.doc_processor).__name__}")
         print(f"  - Chunker: {type(pipeline.chunker).__name__}")
-        print(f"  - HyPE processor: {type(pipeline.hype_processor).__name__}")
+        print(f"  - Query transformer: {type(pipeline.query_transformer).__name__}")
         print(f"  - Retriever: {type(pipeline.retriever).__name__}")
         print(f"  - Generator: {type(pipeline.generator).__name__}")
         

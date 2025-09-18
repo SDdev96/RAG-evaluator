@@ -29,13 +29,13 @@ class ChunkingConfig:
 
 
 @dataclass
-class HyPEConfig:
-    """Configurazione per HyPE (Hypothetical Prompt Embeddings)"""
-    num_hypothetical_questions: int = 1
-    language_model: str = "gemini-1.5-flash"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    temperature: float = 0.5
-    max_tokens: int = 150
+class QueryTransformationsConfig:
+    """Configurazione per Query Transformations"""
+    enable_decompose: bool = False
+    enable_rewrite: bool = True
+    enable_expand: bool = True
+    max_transformations: int = 5
+    language: str = "it"
 
 
 @dataclass
@@ -43,7 +43,7 @@ class FusionRetrievalConfig:
     """Configurazione per Fusion Retrieval"""
     vector_weight: float = 0.7  # alpha parameter
     bm25_weight: float = 0.3
-    top_k: int = 5
+    top_k: int = 8
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
@@ -70,7 +70,7 @@ class RAGConfig:
     """Configurazione principale del sistema RAG"""
     document_processing: DocumentProcessingConfig
     chunking: ChunkingConfig
-    hype: HyPEConfig
+    query_transformations: QueryTransformationsConfig
     fusion_retrieval: FusionRetrievalConfig
     generation: GenerationConfig
     embeddings: EmbeddingsSystemConfig = None
@@ -101,7 +101,7 @@ def get_default_config() -> RAGConfig:
     return RAGConfig(
         document_processing=DocumentProcessingConfig(),
         chunking=ChunkingConfig(),
-        hype=HyPEConfig(),
+        query_transformations=QueryTransformationsConfig(),
         fusion_retrieval=FusionRetrievalConfig(),
         generation=GenerationConfig(),
         embeddings=EmbeddingsSystemConfig()
