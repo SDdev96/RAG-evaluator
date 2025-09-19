@@ -184,12 +184,12 @@ def main():
         description="Sistema RAG Avanzato",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Esempi di utilizzo:
-  python main.py --docs data/                    # Processa documenti e modalità interattiva
-  python main.py --docs data/ --query "Come..."  # Singola query
-  python main.py --batch queries.txt             # Batch da file
-  python main.py --interactive                   # Solo modalità interattiva (usa cache)
-        """
+            Esempi di utilizzo:
+            python main.py --docs data/                    # Processa documenti e modalità interattiva
+            python main.py --docs data/ --query "Come..."  # Singola query
+            python main.py --batch queries.txt             # Batch da file
+            python main.py --interactive                   # Solo modalità interattiva (usa cache)
+            """
     )
     
     parser.add_argument(

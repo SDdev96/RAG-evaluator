@@ -23,6 +23,12 @@ git clone <repository-url>
 cd RAG-evaluator
 ```
 
+### 1.1 Crea e attiva un ambiente virtuale (Consigliato)
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
 ### 2. Installa le dipendenze
 ```bash
 pip install -r requirements.txt
@@ -63,10 +69,10 @@ python main.py --docs data/ --interactive
 - **Output**: Chunks con boundaries semantiche naturali
 
 ### 2. Query Handling (Query transformation)
-- **Input**: Chunks semantici
-- **Processo**: Genera domande ipotetiche per ogni chunk usando LLM
-- **Benefici**: Migliora l'allineamento query-documento
-- **Output**: Chunks arricchiti con embeddings multipli
+- **Input**: Query utente
+- **Processo**: Trasforma la query in altre queries con metodo di decomposizione in sub-queries (di numero {max_transformations}), riformulazione o step-back
+- **Benefici**: Migliora la qualità e la precisione della ricerca
+- **Output**: {max_transformations} queries
 
 ### 3. Fusion Retrieval
 - **Input**: Query utente + indici costruiti

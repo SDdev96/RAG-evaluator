@@ -2,6 +2,7 @@
 Generatore di risposte usando l'API Google Gemini
 """
 import logging
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -274,6 +275,15 @@ Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla dom
         if not chunks:
             return self._generate_no_context_answer("riassunto")
         
+        # Percorso e nome file del riassunto (deterministico per tipo)
+        try:
+            summary_dir = Path("summary")
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            summary_filename = f"summary_{summary_type}.md"
+            summary_path = summary_dir / summary_filename
+        except Exception as e:
+            self.logger.warning(f"Impossibile preparare la cartella summary: {e}")
+        
         # Prompt per il riassunto
         if summary_type == "brief":
             summary_instruction = "Crea un riassunto breve e conciso (massimo 200 parole)"
@@ -286,15 +296,38 @@ Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla dom
         for i, chunk in enumerate(chunks, 1):
             context_text += f"\n--- Sezione {i} ---\n{chunk.content}\n"
         
-        prompt = f"""Sei un esperto nell'analisi e sintesi di documenti tecnici.
+        # Se esiste già il riassunto salvato, non rigenerare
+        try:
+            if 'summary_path' in locals() and summary_path.exists():
+                self.logger.info(f"Riassunto già presente: {summary_path}. Salto la generazione.")
+                cached_answer = summary_path.read_text(encoding='utf-8')
+                sources_used = [chunk.chunk_id for chunk in chunks]
+                return GenerationResult(
+                    answer=cached_answer.strip(),
+                    sources_used=sources_used,
+                    confidence=0.8,
+                    metadata={
+                        "model_used": self.config.model_name,
+                        "num_sources": len(chunks),
+                        "summary_type": summary_type,
+                        "answer_length": len(cached_answer),
+                        "generation_type": "summary",
+                        "cache": True,
+                        "summary_path": str(summary_path)
+                    },
+                    generation_stats={}
+                )
+        except Exception as e:
+            self.logger.warning(f"Impossibile leggere riassunto esistente: {e}. Procedo con la generazione.")
+        
+        prompt = f"""Sei un esperto nell'analisi e sintesi di documenti tecnici. 
+            {context_text}
 
-{context_text}
+            === ISTRUZIONI ===
+            {summary_instruction} dei documenti forniti sopra. 
+            Mantieni l'accuratezza delle informazioni e usa un linguaggio chiaro e professionale.
 
-=== ISTRUZIONI ===
-{summary_instruction} dei documenti forniti sopra. 
-Mantieni l'accuratezza delle informazioni e usa un linguaggio chiaro e professionale.
-
-=== RIASSUNTO ==="""
+            === RIASSUNTO ==="""
         
         try:
             response = self.model.generate_content(prompt)
@@ -303,6 +336,14 @@ Mantieni l'accuratezza delle informazioni e usa un linguaggio chiaro e professio
                 answer = response.text.strip()
                 sources_used = [chunk.chunk_id for chunk in chunks]
                 confidence = 0.8  # Confidence alta per i riassunti
+                
+                # Salva il riassunto in summary/
+                try:
+                    if 'summary_path' in locals():
+                        summary_path.write_text(answer, encoding='utf-8')
+                        self.logger.info(f"Riassunto salvato in: {summary_path}")
+                except Exception as e:
+                    self.logger.warning(f"Impossibile salvare il riassunto: {e}")
                 
                 return GenerationResult(
                     answer=answer,
@@ -313,7 +354,9 @@ Mantieni l'accuratezza delle informazioni e usa un linguaggio chiaro e professio
                         "num_sources": len(chunks),
                         "summary_type": summary_type,
                         "answer_length": len(answer),
-                        "generation_type": "summary"
+                        "generation_type": "summary",
+                        "cache": False,
+                        "summary_path": str(summary_path) if 'summary_path' in locals() else None
                     },
                     generation_stats={}
                 )

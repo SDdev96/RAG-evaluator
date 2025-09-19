@@ -32,7 +32,7 @@ class ChunkingConfig:
 class QueryTransformationsConfig:
     """Configurazione per Query Transformations"""
     enable_decompose: bool = False
-    enable_rewrite: bool = False
+    enable_rewrite: bool = True
     enable_expand: bool = False
     max_transformations: int = 3
     language: str = "it"
