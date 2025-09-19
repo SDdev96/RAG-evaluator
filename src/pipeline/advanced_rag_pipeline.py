@@ -107,7 +107,8 @@ class AdvancedRAGPipeline:
         Returns:
             List[ProcessedDocument]: Documenti processati
         """
-        self.logger.info(f"Processando {len(document_paths)} documenti")
+        
+        self.logger.info(f"Processando {len(document_paths)} document" + "o" if len(document_paths) == 1 else "i")
         
         # Controlla se esiste cache valida
         if not force_reprocess and self._load_cache():
