@@ -39,6 +39,16 @@ HUGGINGFACEHUB_API_TOKEN=your_hf_token_here
 
 Nota: il processing dei PDF è effettuato con PyPDF2 (Docling non è richiesto).
 
+### 4. Quick test dei componenti
+```bash
+python quick_test.py
+```
+
+### 5. Test completo
+```bash
+python main.py --docs data/ --interactive
+```
+
 ## 📋 Flusso di Esecuzione
 
 ### 0. Document Processing
@@ -52,7 +62,7 @@ Nota: il processing dei PDF è effettuato con PyPDF2 (Docling non è richiesto).
 - **Parametri**: `percentile`, `standard_deviation`, `interquartile`
 - **Output**: Chunks con boundaries semantiche naturali
 
-### 2. Query Handling (HyPE)
+### 2. Query Handling (Query transformation)
 - **Input**: Chunks semantici
 - **Processo**: Genera domande ipotetiche per ogni chunk usando LLM
 - **Benefici**: Migliora l'allineamento query-documento
