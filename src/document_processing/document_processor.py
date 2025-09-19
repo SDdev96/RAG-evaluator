@@ -46,6 +46,29 @@ class DocumentProcessor:
         if file_path.suffix.lower() not in self.config.supported_formats:
             raise ValueError(f"Formato non supportato: {file_path.suffix}")
         
+        # Se esiste già il file processato in Markdown nella cartella di output, evita il re-processing
+        try:
+            processed_md_path = self._get_output_path(file_path, ".md")
+            if processed_md_path.exists():
+                self.logger.info(f"Trovato file processato: {processed_md_path}. Salto il processing.")
+                print("Trovato file processato: ", processed_md_path)
+                with open(processed_md_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                metadata = {
+                    "title": file_path.stem,
+                    "processing_method": "cached",
+                    "format": "markdown"
+                }
+                return ProcessedDocument(
+                    content=content,
+                    metadata=metadata,
+                    source_path=str(file_path),
+                    output_path=str(processed_md_path)
+                )
+        except Exception as e:
+            # In caso di problemi nel leggere la cache, prosegui con il normale processing
+            self.logger.warning(f"Impossibile usare il file già processato: {e}. Procedo con il processing.")
+        
         self.logger.info(f"Processando documento: {file_path}")
         
         # Usa Docling per PDF e lettura base per testo semplice
