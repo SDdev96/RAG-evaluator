@@ -1,5 +1,5 @@
 """
-Document Processing usando PyPDF2 per convertire PDF in formato strutturato Markdown
+Document Processing usando Docling per convertire PDF in formato strutturato Markdown
 """
 import os
 import logging
@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 
-import PyPDF2
 from config.config import DocumentProcessingConfig
 
 
@@ -21,12 +20,12 @@ class ProcessedDocument:
 
 
 class DocumentProcessor:
-    """Processore di documenti usando PyPDF2"""
+    """Processore di documenti usando Docling"""
     
     def __init__(self, config: DocumentProcessingConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Uso di PyPDF2 per il processing dei PDF")
+        self.logger.info("Uso di Docling per il processing dei PDF")
         
     def process_document(self, file_path: str) -> ProcessedDocument:
         """
@@ -49,49 +48,67 @@ class DocumentProcessor:
         
         self.logger.info(f"Processando documento: {file_path}")
         
-        # Usa sempre PyPDF2 o lettura testo semplice
+        # Usa Docling per PDF e lettura base per testo semplice
         return self._process_with_fallback(file_path)
     
     def _process_with_fallback(self, file_path: Path) -> ProcessedDocument:
         """Processa il documento usando metodi di fallback"""
         if file_path.suffix.lower() == '.pdf':
-            return self._process_pdf_with_pypdf2(file_path)
+            return self._process_pdf_with_docling(file_path)
         elif file_path.suffix.lower() in ['.txt', '.md']:
             return self._process_text_file(file_path)
         else:
             raise ValueError(f"Formato non supportato per fallback: {file_path.suffix}")
-    
-    def _process_pdf_with_pypdf2(self, file_path: Path) -> ProcessedDocument:
-        """Processa PDF usando PyPDF2"""
+
+    def _process_pdf_with_docling(self, file_path: Path) -> ProcessedDocument:
+        """Processa PDF usando Docling e restituisce contenuto in Markdown.
+
+        Richiede il pacchetto `docling` installato.
+        """
         try:
-            content = ""
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                
-                for page_num, page in enumerate(pdf_reader.pages):
-                    page_text = page.extract_text()
-                    content += f"\n\n## Pagina {page_num + 1}\n\n{page_text}"
-            
+            try:
+                from docling.document_converter import DocumentConverter
+            except Exception as ie:
+                raise ImportError(
+                    "Il pacchetto 'docling' non è installato o non è disponibile. "
+                    "Aggiungilo ai requisiti ed esegui l'installazione (pip install docling)."
+                ) from ie
+
+            converter = DocumentConverter()
+            result = converter.convert(str(file_path))
+
+            # Export in Markdown (Docling fornisce exporter dedicato)
+            content = result.document.export_to_markdown()
+
+            # Metadati di base; alcune metriche possono non essere sempre disponibili
+            pages = None
+            try:
+                # Docling potrebbe fornire metadati/metrics; fallback a None
+                if hasattr(result, "metrics") and isinstance(result.metrics, dict):
+                    pages = result.metrics.get("pages")
+            except Exception:
+                pages = None
+
             metadata = {
                 "title": file_path.stem,
-                "pages": len(pdf_reader.pages),
-                "processing_method": "pypdf2",
+                "pages": pages,
+                "processing_method": "docling",
                 "format": "markdown"
             }
-            
+
             # Salva il file processato
             output_path = self._get_output_path(file_path, ".md")
             self._save_processed_content(content, output_path)
-            
+
             return ProcessedDocument(
                 content=content,
                 metadata=metadata,
                 source_path=str(file_path),
                 output_path=str(output_path)
             )
-            
+
         except Exception as e:
-            self.logger.error(f"Errore nel processing PDF con PyPDF2: {e}")
+            self.logger.error(f"Errore nel processing PDF con Docling: {e}")
             raise
     
     def _process_text_file(self, file_path: Path) -> ProcessedDocument:
@@ -175,7 +192,7 @@ class DocumentProcessor:
 
 
 def create_processor(config: Optional[DocumentProcessingConfig] = None) -> DocumentProcessor:
-    """Factory function per creare un processore di documenti (PyPDF2)."""
+    """Factory function per creare un processore di documenti (Docling)."""
     if config is None:
         config = DocumentProcessingConfig()
     return DocumentProcessor(config)

@@ -19,7 +19,7 @@ def test_imports():
         print("✅ Config module")
         
         from src.document_processing import create_processor
-        print("✅ Document processing module (PyPDF2)")
+        print("✅ Document processing module (Docling)")
         
         from src.chunking.semantic_chunker import create_semantic_chunker
         print("✅ Semantic chunking module")

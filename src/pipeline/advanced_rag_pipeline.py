@@ -66,7 +66,7 @@ class AdvancedRAGPipeline:
     def _initialize_components(self):
         """Inizializza tutti i componenti della pipeline"""
         try:
-            # Document Processor (PyPDF2)
+            # Document Processor (Docling)
             self.doc_processor = DocumentProcessor(self.config.document_processing)
             
             # Semantic Chunker
@@ -117,7 +117,7 @@ class AdvancedRAGPipeline:
         start_time = datetime.now()
         
         # Step 1: Document Processing
-        self.logger.info("Step 1: Document Processing con PyPDF2")
+        self.logger.info("Step 1: Document Processing con Docling")
         processed_docs = []
         
         for doc_path in document_paths:

@@ -5,7 +5,7 @@ langchain-community>=0.2.6
 langchain-huggingface>=0.0.1
 
 # Document processing
-PyPDF2>=3.0.0
+docling
 
 # Vector search and embeddings
 faiss-cpu>=1.8.0
