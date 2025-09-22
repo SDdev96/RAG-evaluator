@@ -28,6 +28,7 @@ def setup_environment():
     required_keys = ["GOOGLE_API_KEY"]
     api_validation = validate_api_keys(required_keys)
     
+    # Lista con le chiavi mancanti
     missing_keys = [key for key, valid in api_validation.items() if not valid]
     
     if missing_keys:

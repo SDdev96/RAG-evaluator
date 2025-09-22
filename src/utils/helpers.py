@@ -42,14 +42,25 @@ def validate_api_keys(required_keys: List[str]) -> Dict[str, bool]:
     
     Args:
         required_keys: Lista delle chiavi API richieste
-        
+
     Returns:
         Dict[str, bool]: Stato di validazione per ogni chiave
+    
+    Args example:
+        required_keys = ["GOOGLE_API_KEY", "HUGGINGFACE_API_KEY"]
+    
+    Return example:
+    {
+        "GOOGLE_API_KEY": True,
+        "HUGGINGFACE_API_KEY": False
+    }
     """
     validation_results = {}
     
     for key in required_keys:
         value = os.getenv(key)
+
+        # Controlla se la chiave esiste e se ha un valore valido
         validation_results[key] = bool(value and len(value.strip()) > 0)
     
     return validation_results
