@@ -195,7 +195,7 @@ class AdvancedRAGPipeline:
         
         return processed_docs
     
-    def query(self, query: str, top_k: Optional[int] = None, 
+    def query(self, query: str, top_k: int = get_default_config().fusion_retrieval.top_k, 
               include_metadata: bool = True) -> RAGResponse:
         """
         Esegue una query completa attraverso la pipeline RAG

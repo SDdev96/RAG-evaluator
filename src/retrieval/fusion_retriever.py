@@ -163,6 +163,13 @@ class FusionRetriever:
 
         Per ciascuna query esegue ricerca vettoriale e BM25 e combina i risultati
         aggregando gli score (max per tipo e poi media pesata).
+
+        Args:
+            queries: Lista di query
+            top_k: Numero di risultati da restituire (default: config.top_k)
+            
+        Returns:
+            List[RetrievalResult]: Risultati ordinati per score fusion
         """
         if top_k is None:
             top_k = self.config.top_k

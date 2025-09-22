@@ -109,7 +109,9 @@ def interactive_mode(pipeline):
             
             # Esegui query normale
             print("🤔 Elaborando...")
-            response = pipeline.query(user_input, top_k=8)
+
+            #Oggetto RagResponse
+            response = pipeline.query(user_input)
             
             print(f"\n🎯 Risposta (Confidence: {response.confidence:.2f}):")
             print(response.answer)
@@ -160,7 +162,7 @@ def batch_mode(pipeline, queries_file):
         
         print(f"🔄 Processando {len(queries)} query da {queries_file}")
         
-        responses = pipeline.batch_query(queries, top_k=8)
+        responses = pipeline.batch_query(queries, top_k=get_default_config().fusion_retrieval.top_k)
         
         # Salva risultati
         output_file = queries_path.with_suffix('.results.txt')
