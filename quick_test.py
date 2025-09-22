@@ -77,7 +77,7 @@ def test_configuration():
         config = get_default_config()
         print(f"✅ Configurazione caricata")
         print(f"  - Document processing: {config.document_processing.input_dir}")
-        print(f"  - Chunking method: {config.chunking.breakpoint_threshold_type}")
+        print(f"  - Chunking method: {config.chunking.chunking_method} - {config.chunking.breakpoint_threshold_type}")
         print(f"  - Query transformations: decompose={config.query_transformations.enable_decompose}, rewrite={config.query_transformations.enable_rewrite}, expand={config.query_transformations.enable_expand}")
         print(f"  - Fusion weights: {config.fusion_retrieval.vector_weight}/{config.fusion_retrieval.bm25_weight}")
         print(f"  - Generation model: {config.generation.model_name}")
@@ -111,27 +111,27 @@ def test_document_processing():
             with open(test_doc_path, 'w', encoding='utf-8') as f:
                 f.write("""# Documento di Test per Sistema RAG
 
-## Introduzione
-Questo è un documento di test per verificare il funzionamento del sistema RAG avanzato.
+                    ## Introduzione
+                    Questo è un documento di test per verificare il funzionamento del sistema RAG avanzato.
 
-## Configurazione Sistema
-Per configurare il sistema IoT Control Plane, seguire questi passaggi:
-1. Installare il software base
-2. Configurare le credenziali di accesso
-3. Verificare la connessione di rete
+                    ## Configurazione Sistema
+                    Per configurare il sistema IoT Control Plane, seguire questi passaggi:
+                    1. Installare il software base
+                    2. Configurare le credenziali di accesso
+                    3. Verificare la connessione di rete
 
-## Risoluzione Problemi
-In caso di errori di connessione:
-- Verificare le impostazioni di rete
-- Controllare le credenziali
-- Riavviare il servizio se necessario
+                    ## Risoluzione Problemi
+                    In caso di errori di connessione:
+                    - Verificare le impostazioni di rete
+                    - Controllare le credenziali
+                    - Riavviare il servizio se necessario
 
-## Monitoraggio
-Il sistema fornisce strumenti di monitoraggio per:
-- Stato delle connessioni
-- Performance del sistema
-- Log degli eventi
-""")
+                    ## Monitoraggio
+                    Il sistema fornisce strumenti di monitoraggio per:
+                    - Stato delle connessioni
+                    - Performance del sistema
+                    - Log degli eventi
+                    """)
             
             pdf_path = test_doc_path
         

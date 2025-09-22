@@ -21,6 +21,7 @@ class DocumentProcessingConfig:
 @dataclass
 class ChunkingConfig:
     """Configurazione per il semantic chunking"""
+    chunking_method: str = "semantic"
     breakpoint_threshold_type: str = "percentile"  # percentile, standard_deviation, interquartile
     breakpoint_threshold_amount: int = 80
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"

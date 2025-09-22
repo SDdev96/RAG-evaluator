@@ -209,8 +209,8 @@ class DocumentProcessor:
                 except Exception as e:
                     self.logger.error(f"Errore nel processare {file_path}: {e}")
                     continue
-        
-        self.logger.info(f"Processati {len(processed_docs)} documenti dalla directory {directory}")
+        self.logger.info(f"Processati {len(processed_docs)} document{'i' if len(processed_docs) > 1 else 'o'} dalla directory {directory}")
+
         return processed_docs
 
 

@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
+import numpy as np
+import faiss
 
 from config.config import RAGConfig, get_default_config
 from src.document_processing.document_processor import DocumentProcessor, ProcessedDocument
@@ -108,12 +110,13 @@ class AdvancedRAGPipeline:
             List[ProcessedDocument]: Documenti processati
         """
         
-        self.logger.info(f"Processando {len(document_paths)} document" + "o" if len(document_paths) == 1 else "i")
+        self.logger.info(f"Processando {len(document_paths)} document{'i' if len(document_paths) > 1 else 'o'}")
+
         
         # Controlla se esiste cache valida
-        if not force_reprocess and self._load_cache():
-            self.logger.info("Cache caricata, saltando il processing")
-            return self.state.processed_documents
+        # if not force_reprocess and self._load_cache():
+        #     self.logger.info("Cache caricata, saltando il processing")
+        #     return self.state.processed_documents
         
         start_time = datetime.now()
         
@@ -143,14 +146,28 @@ class AdvancedRAGPipeline:
         
         for doc in processed_docs:
             try:
-                chunks = self.chunker.chunk_text(
-                    doc.content, 
-                    metadata={
-                        "source_file": doc.source_path,
-                        "document_title": doc.metadata.get("title", "Unknown"),
-                        **doc.metadata
-                    }
-                )
+                # 2.a) Prova a caricare chunk già calcolati da chunked_document/
+                loaded_chunks = self._load_chunked_artifacts(doc)
+                if loaded_chunks is not None and len(loaded_chunks) > 0:
+                    self.logger.info(f"Chunk precomputati trovati per {doc.source_path}. Salto il chunking.")
+                    print(f"Chunk precomputati trovati per {doc.source_path}. Salto il chunking.")
+                    chunks = loaded_chunks
+                else:
+                    # 2.b) Altrimenti esegui il chunking e salva gli artefatti
+                    chunks = self.chunker.chunk_text(
+                        doc.content, 
+                        metadata={
+                            "source_file": doc.source_path,
+                            "document_title": doc.metadata.get("title", "Unknown"),
+                            **doc.metadata
+                        }
+                    )
+                    # Salva artefatti per-documento (FAISS + metadati/chunk)
+                    try:
+                        self._save_chunked_artifacts(doc, chunks)
+                    except Exception as se:
+                        self.logger.warning(f"Impossibile salvare artefatti chunk per {doc.source_path}: {se}")
+
                 all_chunks.extend(chunks)
             except Exception as e:
                 self.logger.error(f"Errore nel chunking di {doc.source_path}: {e}")
@@ -167,8 +184,8 @@ class AdvancedRAGPipeline:
             last_updated=datetime.now()
         )
         
-        # Salva cache
-        self._save_cache()
+        # Ignora il salvataggio della cache (richiesto)
+        # self._save_cache()
         
         processing_time = (datetime.now() - start_time).total_seconds()
         self.logger.info(f"Processing completato in {processing_time:.2f} secondi")
@@ -371,6 +388,111 @@ class AdvancedRAGPipeline:
         for key, value in stats.items():
             self.logger.info(f"{key}: {value}")
         self.logger.info("==============================")
+    
+    def _save_chunked_artifacts(self, doc: ProcessedDocument, chunks: List[SemanticChunk]):
+        """Salva prima del retrieval gli artefatti per ciascun documento:
+        - Indice vettoriale FAISS dei soli chunk del documento (xx.faiss)
+        - File pickle con metadati e contenuti originali dei chunk (xx.pkl)
+        Directory di destinazione: project_root/chunked_document/
+        """
+        if not chunks:
+            return
+
+        # Prepara directory e nomi file basati sul nome del file processato (xx.md -> xx)
+        base_dir = Path("chunked_document")
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        # Preferisci l'output_path (markdown) se presente, altrimenti usa source_path
+        try:
+            stem = Path(doc.output_path).stem if getattr(doc, "output_path", None) else Path(doc.source_path).stem
+        except Exception:
+            stem = Path(doc.source_path).stem
+
+        faiss_path = base_dir / f"{stem}.faiss"
+        pkl_path = base_dir / f"{stem}.pkl"
+
+        # 1) Calcola embeddings dei chunk del documento
+        texts = [c.content for c in chunks]
+        embeddings = self.embeddings_provider.embed_texts(texts)
+        if not embeddings:
+            raise ValueError("Nessun embedding generato per i chunk")
+
+        # 2) Costruisci indice FAISS (inner product su vettori normalizzati per coseno)
+        emb_array = np.array(embeddings, dtype=np.float32)
+        if emb_array.ndim != 2 or emb_array.shape[0] == 0:
+            raise ValueError("Embeddings non validi per costruzione FAISS")
+        dim = emb_array.shape[1]
+        faiss.normalize_L2(emb_array)
+        index = faiss.IndexFlatIP(dim)
+        index.add(emb_array)
+
+        # 3) Salva indice FAISS
+        faiss.write_index(index, str(faiss_path))
+
+        # 4) Salva metadati + chunk originali in pickle
+        chunk_records = []
+        for i, c in enumerate(chunks):
+            chunk_records.append({
+                "chunk_id": c.chunk_id,
+                "content": c.content,
+                "metadata": c.metadata,
+                "start_index": c.start_index,
+                "end_index": c.end_index,
+                "embedding_index": i
+            })
+
+        payload = {
+            "document": {
+                "source_path": doc.source_path,
+                "output_path": getattr(doc, "output_path", None),
+                "title": doc.metadata.get("title") if getattr(doc, "metadata", None) else None,
+            },
+            "chunks": chunk_records,
+            "faiss_index_file": str(faiss_path)
+        }
+
+        with open(pkl_path, "wb") as f:
+            pickle.dump(payload, f)
+        
+        self.logger.info(f"Artefatti chunk salvati: {faiss_path.name}, {pkl_path.name}")
+    
+    def _load_chunked_artifacts(self, doc: ProcessedDocument) -> Optional[List[SemanticChunk]]:
+        """Se presenti, carica i chunk da chunked_document/ evitando di rifare il chunking.
+        Restituisce None se i file non esistono o in caso di errore di caricamento.
+        """
+        try:
+            base_dir = Path("chunked_document")
+            try:
+                stem = Path(doc.output_path).stem if getattr(doc, "output_path", None) else Path(doc.source_path).stem
+            except Exception:
+                stem = Path(doc.source_path).stem
+
+            pkl_path = base_dir / f"{stem}.pkl"
+            # La presenza del pickle è sufficiente per ricostruire i chunk originali
+            if not pkl_path.exists():
+                return None
+
+            with open(pkl_path, "rb") as f:
+                payload = pickle.load(f)
+
+            chunk_records = payload.get("chunks", [])
+            if not chunk_records:
+                return None
+
+            loaded_chunks: List[SemanticChunk] = []
+            for rec in chunk_records:
+                loaded_chunks.append(SemanticChunk(
+                    content=rec.get("content", ""),
+                    metadata=rec.get("metadata", {}),
+                    chunk_id=rec.get("chunk_id", ""),
+                    start_index=rec.get("start_index", 0),
+                    end_index=rec.get("end_index", 0),
+                ))
+
+            return loaded_chunks
+        except Exception as e:
+            self.logger.warning(f"Errore nel caricare chunk precomputati: {e}")
+            return None
     
     def clear_cache(self):
         """Pulisce la cache"""
