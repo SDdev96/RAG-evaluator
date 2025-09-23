@@ -12,6 +12,7 @@ processed/
 summary/
 vector_stores/
 chunked_document/
+indexed_chunks/
 cache/
 logs/
 *.pkl

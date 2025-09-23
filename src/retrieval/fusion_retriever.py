@@ -2,9 +2,12 @@
 Fusion Retrieval che combina ricerca vettoriale e BM25
 """
 import logging
+import os
+import pickle
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
+from pathlib import Path
 
 import faiss
 from rank_bm25 import BM25Okapi
@@ -41,6 +44,7 @@ class FusionRetriever:
         self.bm25_index = None
         self.chunks_data = []
         self.chunk_id_to_index = {}
+        self._bm25_tokenized_texts: Optional[List[List[str]]] = None
         
         self.logger.info("Fusion Retriever inizializzato")
     
@@ -116,6 +120,7 @@ class FusionRetriever:
         
         # Crea indice BM25
         self.bm25_index = BM25Okapi(tokenized_texts)
+        self._bm25_tokenized_texts = tokenized_texts
         
         self.logger.info("Indice BM25 creato")
     
@@ -336,6 +341,95 @@ class FusionRetriever:
         }
         
         return stats
+
+    
+    # Persistenza indici su disco
+    def save_indices(self, directory: str | os.PathLike):
+        """Salva su disco l'indice vettoriale FAISS, il corpus tokenizzato per BM25
+        e i metadati dei chunk necessari al retrieval.
+
+        Files salvati nella directory:
+        - vector.faiss: indice FAISS
+        - corpus_bm25.pkl: lista di testi tokenizzati per ricreare BM25
+        - chunks_data.pkl: lista di mapping per chunk (id, contenuto, metadata)
+        """
+        try:
+            dir_path = Path(directory)
+            dir_path.mkdir(parents=True, exist_ok=True)
+
+            if self.vector_index is None or self.bm25_index is None or not self.chunks_data:
+                raise ValueError("Indici non inizializzati: impossibile salvarli")
+
+            self.logger.info(f"Salvataggio indici di retrieval in '{dir_path}...'")
+            print(f"Salvataggio indici di retrieval in '{dir_path}...'")
+
+            # 1) FAISS
+            faiss_path = dir_path / "vector.faiss"
+            faiss.write_index(self.vector_index, str(faiss_path))
+
+            # 2) Corpus tokenizzato per BM25 (ricreabile)
+            if self._bm25_tokenized_texts is None:
+                raise ValueError("Corpus BM25 non disponibile per il salvataggio")
+            with open(dir_path / "corpus_bm25.pkl", "wb") as f:
+                pickle.dump(self._bm25_tokenized_texts, f)
+            self.logger.info(f"Corpus BM25 salvato in '{dir_path / "corpus_bm25.pkl"}'")
+            print(f"Corpus BM25 salvato in '{dir_path / "corpus_bm25.pkl"}'")
+
+            # 3) Chunk mappings
+            with open(dir_path / "chunks_data.pkl", "wb") as f:
+                pickle.dump(self.chunks_data, f)
+            self.logger.info(f"Chunk mappings salvati in '{dir_path / "chunks_data.pkl"}'")
+            print(f"Chunk mappings salvati in '{dir_path / "chunks_data.pkl"}'")
+
+            self.logger.info(f"Indici di retrieval salvati in '{dir_path}'")
+        except Exception as e:
+            self.logger.error(f"Errore nel salvataggio degli indici: {e}")
+            raise
+
+    def load_indices(self, directory: str | os.PathLike) -> bool:
+        """Carica indici di retrieval da disco, se presenti e validi.
+
+        Returns True se il caricamento ha successo, False altrimenti.
+        """
+        try:
+            dir_path = Path(directory)
+            faiss_path = dir_path / "vector.faiss"
+            bm25_path = dir_path / "corpus_bm25.pkl"
+            chunks_path = dir_path / "chunks_data.pkl"
+
+            if not (faiss_path.exists() and bm25_path.exists() and chunks_path.exists()):
+                return False
+
+            self.logger.info(f"Caricamento indici di retrieval da '{dir_path}'...")
+            print(f"Caricamento indici di retrieval da '{dir_path}'...")
+
+            # 1) Carica FAISS
+            self.vector_index = faiss.read_index(str(faiss_path))
+
+            # 2) Carica corpus BM25 e ricrea indice
+            with open(bm25_path, "rb") as f:
+                tokenized_texts = pickle.load(f)
+            self._bm25_tokenized_texts = tokenized_texts
+            self.bm25_index = BM25Okapi(tokenized_texts)
+            self.logger.info(f"Corpus BM25 caricato da '{bm25_path}'")
+            print(f"Corpus BM25 caricato da '{bm25_path}'")
+
+            # 3) Carica chunk mappings
+            with open(chunks_path, "rb") as f:
+                self.chunks_data = pickle.load(f)
+            self.chunk_id_to_index = {
+                mapping["chunk_id"]: idx for idx, mapping in enumerate(self.chunks_data)
+            }
+            self.logger.info(f"Chunk mappings caricati da '{chunks_path}'")
+            print(f"Chunk mappings caricati da '{chunks_path}'")
+
+            self.logger.info(f"Indici di retrieval caricati da '{dir_path}'")
+            print(f"Indici di retrieval caricati da '{dir_path}'")
+            return True
+        except Exception as e:
+            self.logger.warning(f"Errore nel caricamento degli indici: {e}")
+            print(f"Errore nel caricamento degli indici: {e}")
+            return False
 
 
 def create_fusion_retriever(config: Optional[FusionRetrievalConfig] = None, 

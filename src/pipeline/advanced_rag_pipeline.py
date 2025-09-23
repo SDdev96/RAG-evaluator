@@ -64,7 +64,8 @@ class AdvancedRAGPipeline:
         self.cache_file = Path(self.config.cache_dir) / "pipeline_state.pkl"
         
         self.logger.info("Advanced RAG Pipeline inizializzata")
-    
+
+        
     def _initialize_components(self):
         """Inizializza tutti i componenti della pipeline"""
         try:
@@ -172,9 +173,35 @@ class AdvancedRAGPipeline:
             except Exception as e:
                 self.logger.error(f"Errore nel chunking di {doc.source_path}: {e}")
         
-        # Step 3: Costruzione indici per Retrieval (usa direttamente i chunks)
-        self.logger.info("Step 3: Costruzione indici per Fusion Retrieval")
-        self.retriever.build_indices(all_chunks)
+        # Step 3: Costruzione/Caricamento indici per Retrieval
+        self.logger.info("Step 3: Preparazione/caricamento indici per Fusion Retrieval")
+        index_dir = Path("indexed_chunks")
+        
+        # 3.a) Prova a caricare indici già esistenti da disco
+        loaded_ok = False
+        try:
+            if self.retriever.load_indices(index_dir):
+                loaded_ok = True
+                self.logger.info(f"Indici di retrieval caricati da '{index_dir}'.")
+                print(f"Indici di retrieval caricati da '{index_dir}'.")
+        except Exception as e:
+            self.logger.warning(f"Errore nel caricamento degli indici da '{index_dir}': {e}")
+            print(f"Errore nel caricamento degli indici da '{index_dir}': {e}")
+
+        # 3.b) Se non presenti, costruiscili e salvali
+        if not loaded_ok:
+            self.logger.info("Indici non trovati: preparazione in corso...")
+            self.retriever.build_indices(all_chunks)
+            self.logger.info("Indici costruiti con successo.")
+            print("Indici costruiti con successo.")
+            # Salva indici costruiti su disco per riuso futuro
+            try:
+                self.retriever.save_indices(index_dir)
+                self.logger.info(f"Indici salvati su '{index_dir}'")
+                print(f"Indici salvati su '{index_dir}'")
+            except Exception as e:
+                self.logger.warning(f"Impossibile salvare gli indici su disco: {e}")
+                print(f"Impossibile salvare gli indici su disco: {e}")
         
         # Salva lo stato
         self.state = PipelineState(
@@ -345,34 +372,34 @@ class AdvancedRAGPipeline:
             )
         )
     
-    def _load_cache(self) -> bool:
-        """Carica lo stato dalla cache"""
-        try:
-            if self.cache_file.exists():
-                with open(self.cache_file, 'rb') as f:
-                    self.state = pickle.load(f)
+    # def _load_cache(self) -> bool:
+    #     """Carica lo stato dalla cache"""
+    #     try:
+    #         if self.cache_file.exists():
+    #             with open(self.cache_file, 'rb') as f:
+    #                 self.state = pickle.load(f)
                 
-                # Ricostruisci gli indici
-                if self.state.semantic_chunks:
-                    self.retriever.build_indices(self.state.semantic_chunks)
-                    self.state.indices_built = True
+    #             # Ricostruisci gli indici
+    #             if self.state.semantic_chunks:
+    #                 self.retriever.build_indices(self.state.semantic_chunks)
+    #                 self.state.indices_built = True
                 
-                self.logger.info("Cache caricata con successo")
-                return True
-        except Exception as e:
-            self.logger.warning(f"Errore nel caricare la cache: {e}")
+    #             self.logger.info("Cache caricata con successo")
+    #             return True
+    #     except Exception as e:
+    #         self.logger.warning(f"Errore nel caricare la cache: {e}")
         
-        return False
+    #     return False
     
-    def _save_cache(self):
-        """Salva lo stato nella cache"""
-        try:
-            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(self.state, f)
-            self.logger.info("Cache salvata con successo")
-        except Exception as e:
-            self.logger.warning(f"Errore nel salvare la cache: {e}")
+    # def _save_cache(self):
+    #     """Salva lo stato nella cache"""
+    #     try:
+    #         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+    #         with open(self.cache_file, 'wb') as f:
+    #             pickle.dump(self.state, f)
+    #         self.logger.info("Cache salvata con successo")
+    #     except Exception as e:
+    #         self.logger.warning(f"Errore nel salvare la cache: {e}")
     
     def _log_processing_statistics(self):
         """Log delle statistiche di processing"""
@@ -494,15 +521,15 @@ class AdvancedRAGPipeline:
             self.logger.warning(f"Errore nel caricare chunk precomputati: {e}")
             return None
     
-    def clear_cache(self):
-        """Pulisce la cache"""
-        try:
-            if self.cache_file.exists():
-                self.cache_file.unlink()
-            self.state = None
-            self.logger.info("Cache pulita")
-        except Exception as e:
-            self.logger.error(f"Errore nel pulire la cache: {e}")
+    # def clear_cache(self):
+    #     """Pulisce la cache"""
+    #     try:
+    #         if self.cache_file.exists():
+    #             self.cache_file.unlink()
+    #         self.state = None
+    #         self.logger.info("Cache pulita")
+    #     except Exception as e:
+    #         self.logger.error(f"Errore nel pulire la cache: {e}")
 
 
 def create_rag_pipeline(config: Optional[RAGConfig] = None) -> AdvancedRAGPipeline:
