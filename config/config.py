@@ -31,7 +31,15 @@ class ChunkingConfig:
 
 @dataclass
 class QueryTransformationsConfig:
-    """Configurazione per Query Transformations"""
+    """Configurazione per Query Transformations
+    
+    Args:
+        enable_decompose: abilita la decomposizione della query
+        enable_rewrite: abilita la riscrittura della query
+        enable_expand: abilita l'espansione (step-back) della query
+        max_transformations: numero massimo di trasformazioni
+        language: lingua
+    """
     enable_decompose: bool = False
     enable_rewrite: bool = True
     enable_expand: bool = False
@@ -41,16 +49,31 @@ class QueryTransformationsConfig:
 
 @dataclass
 class FusionRetrievalConfig:
-    """Configurazione per Fusion Retrieval"""
+    """Configurazione per Fusion Retrieval
+    
+    Args:
+        vector_weight: peso del vettore
+        bm25_weight: peso del BM25
+        top_k: numero di chunk
+        embedding_model: modello di embedding
+    """
     vector_weight: float = 0.7  # alpha parameter
     bm25_weight: float = 0.3
-    top_k: int = 8
+    top_k: int = 10
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 @dataclass
 class GenerationConfig:
-    """Configurazione per la generazione con Gemini"""
+    """Configurazione per la generazione con Gemini
+    
+    Args:
+        model_name: nome del modello
+        temperature: temperatura del modello
+        max_tokens: numero massimo di token
+        top_p: top p
+        top_k: top k
+    """
     model_name: str = "gemini-1.5-flash"
     temperature: float = 0.3
     max_tokens: int = 1000

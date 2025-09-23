@@ -120,7 +120,7 @@ def interactive_mode(pipeline):
                 print(f"\n📚 Fonti principali:")
                 # Mappa chunk_id -> risultato di retrieval per accedere al contenuto
                 results_by_id = {r.chunk_id: r for r in getattr(response, 'retrieval_results', [])}
-                for i, source in enumerate(response.sources[:8], 1):
+                for i, source in enumerate(response.sources[:get_default_config().fusion_retrieval.top_k], 1):
                     print(f"  {i}. {source}")
                     # Logga anche su file
                     rag_logger.info(f"Fonte {i}: {source}")
