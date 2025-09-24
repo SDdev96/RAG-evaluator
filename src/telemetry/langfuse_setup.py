@@ -44,7 +44,6 @@ def init_langfuse() -> Tuple[Optional[Langfuse], Optional[CallbackHandler]]:
         # Optionally, initialize the client with configuration options if you dont use environment variables (os.environ)
         # langfuse = Langfuse(public_key="pk-lf-...", secret_key="sk-lf-...")
 
-        
         handler = CallbackHandler()
         return langfuse, handler
     except Exception as e:

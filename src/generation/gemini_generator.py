@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from config.config import GenerationConfig
 from src.retrieval.fusion_retriever import RetrievalResult
@@ -31,27 +30,17 @@ class GeminiGenerator:
     def __init__(self, config: GenerationConfig, api_key: str):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        
-        # Configura Gemini
-        genai.configure(api_key=api_key)
-        
-        # Inizializza il modello
-        self.model = genai.GenerativeModel(
-            model_name=config.model_name,
-            generation_config=genai.types.GenerationConfig(
-                temperature=config.temperature,
-                max_output_tokens=config.max_tokens,
-                top_p=config.top_p,
-                top_k=config.top_k
-            ),
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            }
+
+        # Inizializza il modello tramite LangChain wrapper
+        # GOOGLE_API_KEY dev'essere presente nell'ambiente o passato internamente dal pacchetto
+        self.model = ChatGoogleGenerativeAI(
+            model=config.model_name,
+            temperature=config.temperature,
+            max_output_tokens=config.max_tokens,
+            top_p=config.top_p,
+            top_k=config.top_k,
         )
-        
+
         self.logger.info(f"Gemini Generator inizializzato con modello {config.model_name}")
     
     def generate_answer(self, query: str, retrieved_chunks: List[RetrievalResult], 
@@ -76,18 +65,18 @@ class GeminiGenerator:
             # Costruisci il prompt
             prompt = self._build_prompt(query, retrieved_chunks, context)
             
-            # Genera la risposta
-            response = self.model.generate_content(prompt)
-            
+            # Genera la risposta via LangChain
+            lc_message = self.model.invoke(prompt)
+
             # Processa la risposta
-            if response.text:
-                answer = response.text.strip()
+            if getattr(lc_message, "content", None):
+                answer = lc_message.content.strip()
                 
                 # Estrai le fonti utilizzate
                 sources_used = [chunk.chunk_id for chunk in retrieved_chunks]
                 
                 # Calcola confidence basata sui scores dei chunks
-                confidence = self._calculate_confidence(retrieved_chunks, response)
+                confidence = self._calculate_confidence(retrieved_chunks, lc_message)
                 
                 # Prepara metadati
                 metadata = {
@@ -104,7 +93,6 @@ class GeminiGenerator:
                     "max_tokens": self.config.max_tokens,
                     "top_p": self.config.top_p,
                     "top_k": self.config.top_k,
-                    "safety_ratings": self._extract_safety_ratings(response)
                 }
                 
                 result = GenerationResult(
@@ -161,13 +149,13 @@ class GeminiGenerator:
         # Costruisci il prompt finale
         prompt = f"""{system_prompt}
 
-{context_text}
+                    {context_text}
 
-=== DOMANDA DELL'UTENTE ===
-{query}
+                    === DOMANDA DELL'UTENTE ===
+                    {query}
 
-=== RISPOSTA ===
-Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla domanda dell'utente in modo completo e accurato:"""
+                    === RISPOSTA ===
+                    Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla domanda dell'utente in modo completo e accurato:"""
         
         return prompt
     
@@ -191,7 +179,7 @@ Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla dom
         num_chunks_factor = min(len(chunks) / 3.0, 1.0)  # Massimo con 3+ chunks
         
         # Fattore basato sulla lunghezza della risposta (risposte troppo corte o lunghe sono sospette)
-        response_length = len(response.text) if response.text else 0
+        response_length = len(getattr(response, "content", "")) if response else 0
         if 50 <= response_length <= 2000:
             length_factor = 1.0
         elif response_length < 50:
@@ -208,12 +196,7 @@ Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla dom
         """Estrae le valutazioni di sicurezza dalla risposta"""
         safety_ratings = {}
         
-        if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
-            if hasattr(response.prompt_feedback, 'safety_ratings'):
-                for rating in response.prompt_feedback.safety_ratings:
-                    category = rating.category.name if hasattr(rating.category, 'name') else str(rating.category)
-                    probability = rating.probability.name if hasattr(rating.probability, 'name') else str(rating.probability)
-                    safety_ratings[category] = probability
+        # Non disponibile tramite LangChain wrapper: ritorna vuoto
         
         return safety_ratings
     
@@ -330,10 +313,10 @@ Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla dom
             === RIASSUNTO ==="""
         
         try:
-            response = self.model.generate_content(prompt)
-            
-            if response.text:
-                answer = response.text.strip()
+            lc_message = self.model.invoke(prompt)
+
+            if getattr(lc_message, "content", None):
+                answer = lc_message.content.strip()
                 sources_used = [chunk.chunk_id for chunk in chunks]
                 confidence = 0.8  # Confidence alta per i riassunti
                 
