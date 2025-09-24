@@ -10,7 +10,7 @@ Usage:
 # from __future__ import annotations
 
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any, Dict
 from dotenv import load_dotenv
 
 # External SDK
@@ -40,19 +40,40 @@ def init_langfuse() -> Tuple[Optional[Langfuse], Optional[CallbackHandler]]:
 
     try:
         langfuse = get_client()
-
         # Optionally, initialize the client with configuration options if you dont use environment variables (os.environ)
         # langfuse = Langfuse(public_key="pk-lf-...", secret_key="sk-lf-...")
 
         handler = CallbackHandler()
+        print("Langfuse initialized successfully with handler")
+        
         return langfuse, handler
     except Exception as e:
         print(f"Langfuse initialization error: {e}")
         return None, None 
-    # try:
-    #     langfuse = Langfuse(public_key=LF_PUBLIC, secret_key=LF_SECRET, host=LF_HOST)
-    #     handler = CallbackHandler()
-    #     return langfuse, handler
-    # except Exception as e:
-    #     print(f"Langfuse initialization error: {e}")
-    #     return None, None
+
+
+def invoke_with_langfuse(model: Any, prompt: Any, handler: CallbackHandler, extra_config: Optional[Dict[str, Any]] = None) -> Any:
+    """Invoca un modello LangChain passando il CallbackHandler di Langfuse.
+
+    Args:
+        model: Un'istanza compatibile con LangChain che espone `invoke(input, config=...)` (es. ChatGoogleGenerativeAI, Runnable, Chain).
+        prompt: L'input da inviare al modello (str, dict, o struttura supportata da `invoke`).
+        handler: Istanza di `langfuse.langchain.CallbackHandler` da allegare come callback.
+        extra_config: Config opzionale da unire a `{"callbacks": [handler]}`.
+
+    Returns:
+        La risposta dell'invocazione del modello (es. AIMessage per modelli chat).
+    """
+    if handler is None:
+        raise ValueError("Langfuse handler è None: inizializza Langfuse prima di invocare il modello.")
+
+    cfg: Dict[str, Any] = dict(extra_config or {})
+    callbacks = list(cfg.get("callbacks", []))
+    callbacks.append(handler)
+    cfg["callbacks"] = callbacks
+
+    result = model.invoke(prompt, config=cfg)
+    print(result)
+
+    return result
+

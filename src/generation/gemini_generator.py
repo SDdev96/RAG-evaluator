@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from langchain_google_genai import ChatGoogleGenerativeAI
+from src.telemetry.langfuse_setup import init_langfuse, invoke_with_langfuse
 
 from config.config import GenerationConfig
 from src.retrieval.fusion_retriever import RetrievalResult
@@ -64,9 +65,24 @@ class GeminiGenerator:
         try:
             # Costruisci il prompt
             prompt = self._build_prompt(query, retrieved_chunks, context)
-            
-            # Genera la risposta via LangChain
-            lc_message = self.model.invoke(prompt)
+
+            # Prova a inizializzare Langfuse e invocare con callback per tracciare input/output
+            lf_client, lf_handler = init_langfuse()
+            if lf_handler is not None:
+                extra_meta = {
+                    "component": "GeminiGenerator.generate_answer",
+                    "num_chunks": len(retrieved_chunks),
+                    "model": self.config.model_name,
+                }
+                lc_message = invoke_with_langfuse(
+                    self.model,
+                    prompt,
+                    lf_handler,
+                    extra_config={"metadata": extra_meta},
+                )
+            else:
+                # Fallback: invocazione senza Langfuse
+                lc_message = self.model.invoke(prompt)
 
             # Processa la risposta
             if getattr(lc_message, "content", None):
@@ -199,7 +215,7 @@ class GeminiGenerator:
         # Non disponibile tramite LangChain wrapper: ritorna vuoto
         
         return safety_ratings
-    
+
     def _generate_no_context_answer(self, query: str) -> GenerationResult:
         """Genera una risposta quando non ci sono chunks di contesto"""
         answer = """Mi dispiace, ma non ho trovato informazioni rilevanti nei documenti 
