@@ -351,11 +351,24 @@ def main():
         print("\n❌ Test fallito: problemi con la pipeline")
         sys.exit(1)
     
-    # Test Langfuse + chain.invoke (non bloccante se non configurato)
-    lf_invoke_ok, lf_configured = test_langfuse_chain_invoke()
+    # Prompt per eseguire i test Langfuse
+    try:
+        answer = input("\n❓ Do you want to test Langfuse? [y/n]: ").strip().lower()
+    except Exception:
+        answer = "n"
 
-    # Test Langfuse + LangChain Gemini (non bloccante se non configurato)
-    lf_gemini_ok, lf_gemini_configured = test_langfuse_gemini_langchain()
+    # Inizializza i flag di default
+    lf_invoke_ok, lf_configured = False, False
+    lf_gemini_ok, lf_gemini_configured = False, False
+
+    if answer == "y" :
+        # Test Langfuse + chain.invoke (non bloccante se non configurato) 
+        lf_invoke_ok, lf_configured = test_langfuse_chain_invoke()
+
+        # Test Langfuse + LangChain Gemini (non bloccante se non configurato)
+        lf_gemini_ok, lf_gemini_configured = test_langfuse_gemini_langchain()
+    else:
+        print("\nℹ️ Test Langfuse saltati per scelta utente.")
 
     # Riepilogo
     print("\n" + "=" * 50)
@@ -367,14 +380,17 @@ def main():
     print("✅ Document Processing: OK")
     print("✅ Semantic Chunking: OK" if chunk_ok else "⚠️ Semantic Chunking: Issues")
     print("✅ Pipeline Initialization: OK")
-    if lf_configured:
-        print("✅ Langfuse chain.invoke: OK" if lf_invoke_ok else "❌ Langfuse chain.invoke: Error")
+    if answer == "y":
+        if lf_configured:
+            print("✅ Langfuse chain.invoke: OK" if lf_invoke_ok else "❌ Langfuse chain.invoke: Error")
+        else:
+            print("ℹ️ Langfuse chain.invoke: Non configurato (test saltato)")
+        if lf_gemini_configured:
+            print("✅ Langfuse + Gemini (LangChain): OK" if lf_gemini_ok else "❌ Langfuse + Gemini (LangChain): Error")
+        else:
+            print("ℹ️ Langfuse + Gemini (LangChain): Non configurato o dipendenze mancanti (test saltato)")
     else:
-        print("ℹ️ Langfuse chain.invoke: Non configurato (test saltato)")
-    if lf_gemini_configured:
-        print("✅ Langfuse + Gemini (LangChain): OK" if lf_gemini_ok else "❌ Langfuse + Gemini (LangChain): Error")
-    else:
-        print("ℹ️ Langfuse + Gemini (LangChain): Non configurato o dipendenze mancanti (test saltato)")
+        print("ℹ️ Langfuse: test saltati per scelta utente")
     
     if api_keys_ok:
         print("\n🎉 Tutti i test superati! Il sistema è pronto per l'uso.")
