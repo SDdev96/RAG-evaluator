@@ -217,6 +217,103 @@ def test_basic_pipeline():
         return False, None
 
 
+def test_langfuse_chain_invoke():
+    """Test minimale di integrazione Langfuse con una chain LangChain usando CallbackHandler.
+
+    Crea una piccola catena (echo) e invoca chain.invoke con il callback di Langfuse.
+    Se le credenziali Langfuse non sono configurate, il test viene segnalato come 'skipped'.
+    """
+    print("\n🧪 Testing Langfuse + LangChain chain.invoke...")
+    try:
+        from src.telemetry.langfuse_setup import init_langfuse
+        from langchain_core.runnables import RunnableLambda
+    except ImportError as e:
+        print(f"❌ Import error (LangChain/Langfuse): {e}")
+        return False, False
+
+    # Inizializza Langfuse (client e handler)
+    langfuse, handler = init_langfuse()
+    if handler is None:
+        print("ℹ️ Langfuse non configurato (manca LANGFUSE_PUBLIC_KEY/SECRET_KEY). Test saltato.")
+        return True, False
+
+    try:
+        # Piccola chain di test: echo dell'input
+        def _echo(inputs: dict):
+            text = inputs.get("input", "")
+            return {"output": f"Echo: {text}"}
+
+        chain = RunnableLambda(_echo)
+
+        # Invoca con il callback Langfuse
+        result = chain.invoke({"input": "hello from quick_test"}, config={"callbacks": [handler]})
+        ok = isinstance(result, dict) and "output" in result
+        if ok:
+            print(f"✅ chain.invoke eseguito. Output: {result['output']}")
+            return True, True
+        else:
+            print("❌ chain.invoke non ha prodotto output atteso")
+            return False, True
+    except Exception as e:
+        print(f"❌ Errore nell'invocazione chain.invoke con Langfuse: {e}")
+        return False, True
+
+
+def test_langfuse_gemini_langchain():
+    """Test di integrazione Langfuse con il modello Gemini via LangChain.
+
+    - Usa ChatGoogleGenerativeAI (pacchetto: langchain-google-genai)
+    - Invia un prompt semplice e verifica la risposta
+    - Collega il CallbackHandler di Langfuse alla invocazione
+    Se le credenziali Langfuse non sono configurate, il test viene segnalato come 'skipped'.
+    Se il pacchetto langchain-google-genai non è installato, il test fallisce in modo esplicito con suggerimento.
+    """
+    print("\n🧪 Testing Langfuse + LangChain Gemini (ChatGoogleGenerativeAI)...")
+    try:
+        from src.telemetry.langfuse_setup import init_langfuse
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from config.config import get_default_config
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        print("   Assicurati di avere installato 'langchain-google-genai'.")
+        return False, False
+
+    # Inizializza Langfuse (client e handler)
+    langfuse, handler = init_langfuse()
+    if handler is None:
+        print("ℹ️ Langfuse non configurato (manca LANGFUSE_PUBLIC_KEY/SECRET_KEY). Test saltato.")
+        return True, False
+
+    # Crea il modello Gemini tramite LangChain usando la configurazione
+    try:
+        rag_cfg = get_default_config()
+        gen_cfg = rag_cfg.generation
+        model = ChatGoogleGenerativeAI(
+            model=gen_cfg.model_name,
+            temperature=gen_cfg.temperature,
+            max_output_tokens=gen_cfg.max_tokens,
+            top_p=gen_cfg.top_p,
+            top_k=gen_cfg.top_k,
+        )
+
+        # Prompt semplice di test
+        prompt = "Di' ciao dal quick_test con Langfuse!"
+
+        # Invoca il modello con il callback di Langfuse
+        result = model.invoke(prompt, config={"callbacks": [handler]})
+
+        # result è un AIMessage; verifichiamo che abbia del contenuto
+        content = getattr(result, "content", None)
+        if content and isinstance(content, str) and content.strip():
+            print(f"✅ Gemini LangChain invoke eseguito (model={gen_cfg.model_name}). Output: {content[:120]}...")
+            return True, True
+        else:
+            print("❌ Nessun contenuto prodotto dal modello Gemini via LangChain")
+            return False, True
+    except Exception as e:
+        print(f"❌ Errore nell'invocazione Gemini LangChain con Langfuse: {e}")
+        return False, True
+
 def main():
     """Test principale"""
     print("🚀 QUICK TEST - Sistema RAG Avanzato")
@@ -254,6 +351,12 @@ def main():
         print("\n❌ Test fallito: problemi con la pipeline")
         sys.exit(1)
     
+    # Test Langfuse + chain.invoke (non bloccante se non configurato)
+    lf_invoke_ok, lf_configured = test_langfuse_chain_invoke()
+
+    # Test Langfuse + LangChain Gemini (non bloccante se non configurato)
+    lf_gemini_ok, lf_gemini_configured = test_langfuse_gemini_langchain()
+
     # Riepilogo
     print("\n" + "=" * 50)
     print("📊 RIEPILOGO TEST")
@@ -264,6 +367,14 @@ def main():
     print("✅ Document Processing: OK")
     print("✅ Semantic Chunking: OK" if chunk_ok else "⚠️ Semantic Chunking: Issues")
     print("✅ Pipeline Initialization: OK")
+    if lf_configured:
+        print("✅ Langfuse chain.invoke: OK" if lf_invoke_ok else "❌ Langfuse chain.invoke: Error")
+    else:
+        print("ℹ️ Langfuse chain.invoke: Non configurato (test saltato)")
+    if lf_gemini_configured:
+        print("✅ Langfuse + Gemini (LangChain): OK" if lf_gemini_ok else "❌ Langfuse + Gemini (LangChain): Error")
+    else:
+        print("ℹ️ Langfuse + Gemini (LangChain): Non configurato o dipendenze mancanti (test saltato)")
     
     if api_keys_ok:
         print("\n🎉 Tutti i test superati! Il sistema è pronto per l'uso.")
