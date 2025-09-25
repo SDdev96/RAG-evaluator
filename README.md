@@ -39,18 +39,19 @@ Crea un file `.env` nella root del progetto:
 ```env
 GOOGLE_API_KEY=your_google_gemini_api_key_here
 
-# Opzionale (per modelli privati Hugging Face o limiti più alti):
-HUGGINGFACEHUB_API_TOKEN=your_hf_token_here
-```
+LANGFUSE_PUBLIC_KEY="pk-lf-..."
+LANGFUSE_SECRET_KEY="sk-lf-..."
 
-Nota: il processing dei PDF è effettuato con PyPDF2 (Docling non è richiesto).
+# Opzionale (per modelli privati Hugging Face o limiti più alti):
+HF_API_TOKEN=your_hf_token_here
+```
 
 ### 4. Quick test dei componenti
 ```bash
 python quick_test.py
 ```
 
-### 5. Test completo
+### 6. Esecuzione dell'applicativo
 ```bash
 python main.py --docs data/ --interactive
 ```
@@ -59,14 +60,18 @@ python main.py --docs data/ --interactive
 
 ### 0. Document Processing
 - **Input**: PDF, TXT, MD
-- **Processo**: Estrazione testo con PyPDF2 e conversione in Markdown semplice
+- **Processo**: Estrazione testo con Docling e conversione in Markdown semplice
 - **Output**: Documenti processati con metadati
 
+Nota: Processing del documento eseguibile in back office 
+
 ### 1. Semantic Chunking
-- **Input**: Testo strutturato
+- **Input**: Testo processato
 - **Processo**: LangChain SemanticChunker divide il testo in chunks semanticamente coerenti
 - **Parametri**: `percentile`, `standard_deviation`, `interquartile`
-- **Output**: Chunks con boundaries semantiche naturali
+- **Output**: Chunks con boundaries semantiche naturali con limitazioni sui chunk size
+
+Nota: Chunking eseguibile in back office
 
 ### 2. Query Handling (Query transformation)
 - **Input**: Query utente
@@ -80,7 +85,16 @@ python main.py --docs data/ --interactive
 - **Formula**: `score = α × vector_score + β × bm25_score`
 - **Output**: Risultati ranked con score fusion
 
+Nota: Indicizzazioni eseguibili in back office
+
 ### 4. Generation
 - **Input**: Query + chunks recuperati
 - **Processo**: Google Gemini genera risposta basata sul contesto
 - **Output**: Risposta strutturata con fonti e confidence
+
+### 5. Telemetry (Langfuse)
+- **Input**: Prompt + risposta LLM
+- **Processo**: Langfuse registra input/output e metadati
+- **Output**: Tracciato completo con token cost e altri metadati
+
+Nota: per utilizzare Langfuse, è necessario avere un account su Langfuse e configurare le API keys in .env
