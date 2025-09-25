@@ -71,9 +71,5 @@ def invoke_with_langfuse(model: Any, prompt: Any, handler: CallbackHandler, extr
     callbacks = list(cfg.get("callbacks", []))
     callbacks.append(handler)
     cfg["callbacks"] = callbacks
-
-    result = model.invoke(prompt, config=cfg)
-    print(result)
-
-    return result
-
+    
+    return model.invoke(prompt, config=cfg)

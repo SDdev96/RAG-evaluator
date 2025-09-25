@@ -35,7 +35,7 @@ class GeminiGenerator:
 
         # Inizializza il modello tramite LangChain wrapper
         # GOOGLE_API_KEY dev'essere presente nell'ambiente o passato internamente dal pacchetto
-        self.model = ChatGoogleGenerativeAI(
+        self.llm = ChatGoogleGenerativeAI(
             model=config.model_name,
             temperature=config.temperature,
             max_output_tokens=config.max_tokens,
@@ -77,14 +77,19 @@ class GeminiGenerator:
                     "model": self.config.model_name,
                 }
                 lc_message = invoke_with_langfuse(
-                    self.model,
+                    self.llm,
                     prompt,
                     self.lf_handler,
                     extra_config={"metadata": extra_meta},
                 )
             else:
                 # Fallback: invocazione senza Langfuse
-                lc_message = self.model.invoke(prompt)
+                print("Langfuse non inizializzato, invocazione senza callback")
+                self.logger.warning("Langfuse non inizializzato, invocazione senza callback")
+                lc_message = self.llm.invoke(prompt)
+            
+            print("Risposta dell'LLM: ", lc_message)
+            self.logger.info("Risposta dell'LLM: ", lc_message)
 
             # Accesso sicuro ai campi
             input_tokens = lc_message.usage_metadata.get('input_tokens', 0)  # Default a 0 se non presente
@@ -95,7 +100,7 @@ class GeminiGenerator:
                 model_name=self.config.model_name,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                paid_level=True, # TODO: da modificare quando si passa al livello pagante
+                paid_level=False, # TODO: da modificare quando si passa al livello pagante
                 prompt_length=len(prompt)
             )
             self.logger.info(f"Token cost: ${token_cost['total_cost_usd']}")
@@ -372,7 +377,7 @@ class GeminiGenerator:
             === RIASSUNTO ==="""
         
         try:
-            lc_message = self.model.invoke(prompt)
+            lc_message = self.llm.invoke(prompt)
 
             if getattr(lc_message, "content", None):
                 answer = lc_message.content.strip()
