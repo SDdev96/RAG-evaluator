@@ -11,6 +11,7 @@ from src.telemetry.langfuse_setup import init_langfuse, invoke_with_langfuse
 
 from config.config import GenerationConfig
 from src.retrieval.fusion_retriever import RetrievalResult
+from src.utils.helpers import compute_token_costs
 
 
 @dataclass
@@ -19,7 +20,7 @@ class GenerationResult:
     answer: str
     sources_used: List[str]
     confidence: float
-    metadata: Dict[str, Any]
+    metadata: List[Dict[str, Any]]
     generation_stats: Dict[str, Any]
 
 
@@ -41,6 +42,9 @@ class GeminiGenerator:
             top_p=config.top_p,
             top_k=config.top_k,
         )
+
+        # Prova a inizializzare Langfuse e invocare con callback per tracciare input/output
+        self.lf_client, self.lf_handler = init_langfuse()
 
         self.logger.info(f"Gemini Generator inizializzato con modello {config.model_name}")
     
@@ -66,9 +70,7 @@ class GeminiGenerator:
             # Costruisci il prompt
             prompt = self._build_prompt(query, retrieved_chunks, context)
 
-            # Prova a inizializzare Langfuse e invocare con callback per tracciare input/output
-            lf_client, lf_handler = init_langfuse()
-            if lf_handler is not None:
+            if self.lf_handler is not None:
                 extra_meta = {
                     "component": "GeminiGenerator.generate_answer",
                     "num_chunks": len(retrieved_chunks),
@@ -77,12 +79,28 @@ class GeminiGenerator:
                 lc_message = invoke_with_langfuse(
                     self.model,
                     prompt,
-                    lf_handler,
+                    self.lf_handler,
                     extra_config={"metadata": extra_meta},
                 )
             else:
                 # Fallback: invocazione senza Langfuse
                 lc_message = self.model.invoke(prompt)
+
+            # Accesso sicuro ai campi
+            input_tokens = lc_message.usage_metadata.get('input_tokens', 0)  # Default a 0 se non presente
+            output_tokens = lc_message.usage_metadata.get('output_tokens', 0)  # Default a 0 se non presente
+
+            # Ora puoi usarli, ad esempio:
+            token_cost = compute_token_costs(
+                model_name=self.config.model_name,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                paid_level=True, # TODO: da modificare quando si passa al livello pagante
+                prompt_length=len(prompt)
+            )
+            self.logger.info(f"Token cost: ${token_cost['total_cost_usd']}")
+            print("Total cost: $", token_cost["total_cost_usd"])
+
 
             # Processa la risposta
             if getattr(lc_message, "content", None):
@@ -94,14 +112,27 @@ class GeminiGenerator:
                 # Calcola confidence basata sui scores dei chunks
                 confidence = self._calculate_confidence(retrieved_chunks, lc_message)
                 
-                # Prepara metadati
-                metadata = {
+                # Prepara metadati RAG
+                rag_metadata = {
                     "model_used": self.config.model_name,
                     "num_sources": len(retrieved_chunks),
                     "query_length": len(query),
                     "answer_length": len(answer),
                     "prompt_length": len(prompt)
                 }
+                
+                # Estrai metadati della risposta LLM
+                response_metadata = getattr(lc_message, "response_metadata", {})
+                
+                # Estrai metadati di utilizzo
+                usage_metadata = getattr(lc_message, "usage_metadata", {})
+                
+                # Crea la lista di metadati strutturata
+                metadata = [
+                    rag_metadata,      # RAG_metadata
+                    response_metadata, # response_metadata
+                    usage_metadata     # usage_metadata
+                ]
                 
                 # Statistiche di generazione
                 generation_stats = {
@@ -226,13 +257,17 @@ class GeminiGenerator:
             answer=answer,
             sources_used=[],
             confidence=0.0,
-            metadata={
-                "model_used": self.config.model_name,
-                "num_sources": 0,
-                "query_length": len(query),
-                "answer_length": len(answer),
-                "generation_type": "no_context"
-            },
+            metadata=[
+                {
+                    "model_used": self.config.model_name,
+                    "num_sources": 0,
+                    "query_length": len(query),
+                    "answer_length": len(answer),
+                    "generation_type": "no_context"
+                },
+                {},  # response_metadata vuoto
+                {}   # usage_metadata vuoto
+            ],
             generation_stats={}
         )
     
@@ -249,13 +284,17 @@ class GeminiGenerator:
             answer=answer,
             sources_used=sources_used,
             confidence=0.1,
-            metadata={
-                "model_used": self.config.model_name,
-                "num_sources": len(chunks),
-                "query_length": len(query),
-                "answer_length": len(answer),
-                "generation_type": "fallback"
-            },
+            metadata=[
+                {
+                    "model_used": self.config.model_name,
+                    "num_sources": len(chunks),
+                    "query_length": len(query),
+                    "answer_length": len(answer),
+                    "generation_type": "fallback"
+                },
+                {},  # response_metadata vuoto
+                {}   # usage_metadata vuoto
+            ],
             generation_stats={}
         )
     
@@ -305,15 +344,19 @@ class GeminiGenerator:
                     answer=cached_answer.strip(),
                     sources_used=sources_used,
                     confidence=0.8,
-                    metadata={
-                        "model_used": self.config.model_name,
-                        "num_sources": len(chunks),
-                        "summary_type": summary_type,
-                        "answer_length": len(cached_answer),
-                        "generation_type": "summary",
-                        "cache": True,
-                        "summary_path": str(summary_path)
-                    },
+                    metadata=[
+                        {
+                            "model_used": self.config.model_name,
+                            "num_sources": len(chunks),
+                            "summary_type": summary_type,
+                            "answer_length": len(cached_answer),
+                            "generation_type": "summary",
+                            "cache": True,
+                            "summary_path": str(summary_path)
+                        },
+                        {},  # response_metadata vuoto
+                        {}   # usage_metadata vuoto
+                    ],
                     generation_stats={}
                 )
         except Exception as e:
@@ -348,15 +391,19 @@ class GeminiGenerator:
                     answer=answer,
                     sources_used=sources_used,
                     confidence=confidence,
-                    metadata={
-                        "model_used": self.config.model_name,
-                        "num_sources": len(chunks),
-                        "summary_type": summary_type,
-                        "answer_length": len(answer),
-                        "generation_type": "summary",
-                        "cache": False,
-                        "summary_path": str(summary_path) if 'summary_path' in locals() else None
-                    },
+                    metadata=[
+                        {
+                            "model_used": self.config.model_name,
+                            "num_sources": len(chunks),
+                            "summary_type": summary_type,
+                            "answer_length": len(answer),
+                            "generation_type": "summary",
+                            "cache": False,
+                            "summary_path": str(summary_path) if 'summary_path' in locals() else None
+                        },
+                        {},  # response_metadata vuoto
+                        {}   # usage_metadata vuoto
+                    ],
                     generation_stats={}
                 )
             

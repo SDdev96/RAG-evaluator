@@ -327,3 +327,68 @@ def normalize_score(score: float, min_val: float = 0.0, max_val: float = 1.0) ->
         float: Punteggio normalizzato
     """
     return max(min_val, min(max_val, score))
+
+
+def compute_token_costs(
+    model_name: str,
+    input_tokens: int,
+    output_tokens: int,
+    paid_level: bool = False,
+    prompt_length: Optional[int] = None,
+) -> Dict[str, float]:
+    """Calcola il costo stimato (USD) dato il numero di token in input e output.
+
+    Prezzi espressi per 1.000 token (migliaia).
+    ATTENZIONE: I costi possono variare nel tempo.
+    Per ulteriori dettagli sui costi di Gemini: https://ai.google.dev/gemini-api/docs/pricing?hl=it#gemini-1.5-flash
+
+    Args:
+        model_name: Nome del modello LLM
+        input_tokens: Numero di token di prompt/input
+        output_tokens: Numero di token generati in output
+        paid_level: Se True, calcola i costi per il livello pagante
+        prompt_length: Lunghezza del prompt per determinare i prezzi per modelli con tiering
+
+    Returns:
+        Dict con le chiavi:
+        - input_cost_usd
+        - output_cost_usd
+        - total_cost_usd
+    """
+
+    if not paid_level:
+        raise ValueError("Non supportato per livello gratuito")
+
+    if model_name == "gemini-1.5-flash":
+        # Prezzi per 1 MILIONE di token
+        input_price_per_million = 0.075 if (prompt_length or 0) <= 128000 else 0.15
+        output_price_per_million = 0.30 if (prompt_length or 0) <= 128000 else 0.60
+
+        # Converti a prezzo per 1.000 token
+        input_price_per_thousand = input_price_per_million / 1000
+        output_price_per_thousand = output_price_per_million / 1000
+
+    elif model_name == "gemini-2.5-flash":
+        # Prezzi per 1 MILIONE di token
+        input_price_per_million = 0.30  # per testo/immagine/video
+        output_price_per_million = 2.50
+
+        # Converti a prezzo per 1.000 token
+        input_price_per_thousand = input_price_per_million / 1000
+        output_price_per_thousand = output_price_per_million / 1000
+
+    else:
+        raise ValueError(f"Modello non supportato: {model_name}")
+
+    it = max(0, int(input_tokens))
+    ot = max(0, int(output_tokens))
+
+    input_cost = (it / 1_000.0) * input_price_per_thousand
+    output_cost = (ot / 1_000.0) * output_price_per_thousand
+    total_cost = input_cost + output_cost
+
+    return {
+        "input_cost_usd": round(input_cost, 6),
+        "output_cost_usd": round(output_cost, 6),
+        "total_cost_usd": round(total_cost, 6),
+    }

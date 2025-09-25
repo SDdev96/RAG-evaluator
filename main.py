@@ -14,7 +14,6 @@ from config.config import get_default_config
 from src.pipeline.advanced_rag_pipeline import create_rag_pipeline
 from src.utils.logging_config import setup_logging, get_logger
 from src.utils.helpers import validate_api_keys
-from src.telemetry.langfuse_setup import init_langfuse
 
 
 def setup_environment():

@@ -346,7 +346,11 @@ class AdvancedRAGPipeline:
                 answer="Nessun risultato trovato",
                 sources_used=[],
                 confidence=0.0,
-                metadata={},
+                metadata=[
+                    {},  # RAG_metadata vuoto
+                    {},  # response_metadata vuoto
+                    {}   # usage_metadata vuoto
+                ],
                 generation_stats={}
             )
         )
@@ -367,7 +371,11 @@ class AdvancedRAGPipeline:
                 answer=f"Errore: {error}",
                 sources_used=[],
                 confidence=0.0,
-                metadata={},
+                metadata=[
+                    {},  # RAG_metadata vuoto
+                    {},  # response_metadata vuoto
+                    {}   # usage_metadata vuoto
+                ],
                 generation_stats={}
             )
         )
