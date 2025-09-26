@@ -357,7 +357,12 @@ def compute_token_costs(
     """
 
     if not paid_level:
-        raise ValueError("Non supportato per livello gratuito")
+        print("Non supportato per livello gratuito")
+        return {
+            "input_cost_usd": 0,
+            "output_cost_usd": 0,
+            "total_cost_usd": 0,
+        }
 
     if model_name == "gemini-1.5-flash":
         # Prezzi per 1 MILIONE di token
@@ -378,7 +383,8 @@ def compute_token_costs(
         output_price_per_thousand = output_price_per_million / 1000
 
     else:
-        raise ValueError(f"Modello non supportato: {model_name}")
+        print("Modello non supportato")
+        return "modello non supportato"
 
     it = max(0, int(input_tokens))
     ot = max(0, int(output_tokens))
