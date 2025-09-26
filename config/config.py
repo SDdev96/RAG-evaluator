@@ -74,7 +74,7 @@ class GenerationConfig:
         top_p: top p
         top_k: top k
     """
-    model_name: str = "gemini-1.5-flash"
+    model_name: str = "gemini-2.0-flash-lite"
     temperature: float = 0.3
     max_tokens: int = 1000
     top_p: float = 0.9
