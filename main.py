@@ -133,9 +133,10 @@ def interactive_mode(pipeline):
                         # E scrivilo anche nei log (snippet completo potrebbe essere lungo, quindi lo mettiamo a DEBUG)
                         rag_logger.info(f"     └─ Estratto{score_info}: {snippet}")
 
-            print(f"\n⏱️ Tempo: {response.processing_time:.2f}s")
             # Logga tempo di elaborazione
-            rag_logger.info(f"Tempo elaborazione: {response.processing_time:.2f}s")
+            rag_logger.info(f"\n⏱️Tempo elaborazione: {response.processing_time:.2f}s")
+
+            rag_logger.info(f"Riassunto:\n {response.summary}")
             
         except KeyboardInterrupt:
             break

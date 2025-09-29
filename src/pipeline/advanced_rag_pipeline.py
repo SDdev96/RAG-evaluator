@@ -36,6 +36,7 @@ class RAGResponse:
     metadata: Dict[str, Any]
     retrieval_results: List[RetrievalResult]
     generation_result: GenerationResult
+    summary: str
 
 
 @dataclass
@@ -91,7 +92,7 @@ class AdvancedRAGPipeline:
                 self.config.generation, 
                 self.config.google_api_key
             )
-            
+
             self.logger.info("Tutti i componenti inizializzati con successo")
             
         except Exception as e:
@@ -256,6 +257,9 @@ class AdvancedRAGPipeline:
             
             # Calcola tempo totale
             processing_time = (datetime.now() - start_time).total_seconds()
+
+            # Step 3: Summary
+            summary = self.generator.generate_summary_from_llm_response(query, generation_result.answer)
             
             # Prepara metadati
             metadata = {
@@ -282,7 +286,8 @@ class AdvancedRAGPipeline:
                 processing_time=processing_time,
                 metadata=metadata,
                 retrieval_results=retrieval_results,
-                generation_result=generation_result
+                generation_result=generation_result,
+                summary=summary
             )
             
             self.logger.info(f"Query processata in {processing_time:.2f} secondi")
@@ -316,7 +321,7 @@ class AdvancedRAGPipeline:
         
         # Seleziona i chunk più rappresentativi
         top_chunks = []
-        for chunk in self.state.semantic_chunks[:10]:  # Top 10 chunks
+        for chunk in self.state.semantic_chunks[:get_default_config().fusion_retrieval.top_k]:  # Top 10 chunks by default
             result = RetrievalResult(
                 chunk_id=chunk.chunk_id,
                 content=chunk.content,
@@ -328,7 +333,7 @@ class AdvancedRAGPipeline:
             )
             top_chunks.append(result)
         
-        return self.generator.generate_summary(top_chunks, summary_type)
+        return self.generator.generate_summary_from_chunks(top_chunks, summary_type)
     
     def _create_empty_response(self, query: str, start_time: datetime) -> RAGResponse:
         """Crea una risposta vuota quando non ci sono risultati"""

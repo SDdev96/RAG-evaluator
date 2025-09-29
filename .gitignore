@@ -9,7 +9,6 @@ data/X.AMN.PNRR.U.001.07.00 Manuale utente IoT Control Plane.pdf
 
 # Cache e file temporanei del sistema RAG
 processed/
-summary/
 vector_stores/
 chunked_document/
 indexed_chunks/
@@ -17,6 +16,7 @@ cache/
 logs/
 *.pkl
 *.cache
+summary/
 
 # Output e risultati
 *.results.txt

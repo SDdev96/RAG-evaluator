@@ -14,7 +14,7 @@ from typing import Optional, Tuple, Any, Dict
 from dotenv import load_dotenv
 
 # External SDK
-from langfuse import Langfuse, get_client
+from langfuse import Langfuse, get_client, observe
 from langfuse.langchain import CallbackHandler
 
 # Load .env to allow LANGFUSE_* variables
@@ -51,7 +51,7 @@ def init_langfuse() -> Tuple[Optional[Langfuse], Optional[CallbackHandler]]:
         print(f"Langfuse initialization error: {e}")
         return None, None 
 
-
+@observe(name="Old test")
 def invoke_with_langfuse(model: Any, prompt: Any, handler: CallbackHandler, extra_config: Optional[Dict[str, Any]] = None) -> Any:
     """Invoca un modello LangChain passando il CallbackHandler di Langfuse.
 

@@ -6,12 +6,13 @@ Un sistema di Retrieval-Augmented Generation (RAG) modulare che integra tecniche
 ### 🏗️ Architettura Modulare
 ```
 src/
-├── document_processing/    # PDF processor (PyPDF2)
+├── document_processing/    # PDF processor (Docling)
 ├── chunking/              # Semantic chunking
 ├── query_handling/        # HyPE processor
 ├── retrieval/             # Fusion retrieval
 ├── generation/            # Gemini generator
 ├── pipeline/              # Pipeline principale
+├── telemetry/             #Telemetria con Langfuse
 └── utils/                 # Utilità e helpers
 ```
 
@@ -92,7 +93,12 @@ Nota: Indicizzazioni eseguibili in back office
 - **Processo**: Google Gemini genera risposta basata sul contesto
 - **Output**: Risposta strutturata con fonti e confidence
 
-### 5. Telemetry (Langfuse)
+### 5. Summary
+- **Input**: Query + Risposta LLM
+- **Processo**: Google Gemini genera riassunto basato sul contesto
+- **Output**: Riassunto generato anche salvato in un file json (sovrascrivibile)
+
+### 6. Telemetry (Langfuse)
 - **Input**: Prompt + risposta LLM
 - **Processo**: Langfuse registra input/output e metadati
 - **Output**: Tracciato completo con token cost e altri metadati

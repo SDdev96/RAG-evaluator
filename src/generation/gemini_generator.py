@@ -2,6 +2,7 @@
 Generatore di risposte usando l'API Google Gemini
 """
 import logging
+import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -87,6 +88,8 @@ class GeminiGenerator:
                 print("Langfuse non inizializzato, invocazione senza callback")
                 self.logger.warning("Langfuse non inizializzato, invocazione senza callback")
                 lc_message = self.llm.invoke(prompt)
+
+            # lc_message = self.llm.invoke(prompt)
             
             print("Risposta dell'LLM: ", lc_message)
             self.logger.info("Risposta dell'LLM: ", lc_message)
@@ -303,7 +306,7 @@ class GeminiGenerator:
             generation_stats={}
         )
     
-    def generate_summary(self, chunks: List[RetrievalResult], 
+    def generate_summary_from_chunks(self, chunks: List[RetrievalResult], 
                         summary_type: str = "comprehensive") -> GenerationResult:
         """
         Genera un riassunto dei chunks forniti
@@ -322,7 +325,7 @@ class GeminiGenerator:
         try:
             summary_dir = Path("summary")
             summary_dir.mkdir(parents=True, exist_ok=True)
-            summary_filename = f"summary_{summary_type}.md"
+            summary_filename = f"summary_from_chunks_{summary_type}.md"
             summary_path = summary_dir / summary_filename
         except Exception as e:
             self.logger.warning(f"Impossibile preparare la cartella summary: {e}")
@@ -417,7 +420,75 @@ class GeminiGenerator:
         
         return self._generate_fallback_answer("riassunto", chunks)
 
+    def generate_summary_from_llm_response(self, query: str, llm_response_content: str, summary_type: str = "comprehensive") -> GenerationResult:
+        """
+        Genera un riassunto della risposta fornita
 
+        Args:
+            query: La domanda originale dell'utente
+            llm_response_content: Risposta fornita da Gemini
+            summary_type: Tipo di riassunto ("comprehensive", "brief", "key_points")
+
+        Returns:
+            GenerationResult: Riassunto generato
+        """
+
+        if not llm_response_content:
+            print("Risposta LLM vuota")
+            self.logger.warning("Risposta LLM vuota")
+            return self._generate_no_context_answer("riassunto")
+
+        # Prompt per il riassunto
+        if summary_type == "brief":
+            summary_instruction = "Crea un riassunto breve e conciso (massimo 200 parole)"
+        elif summary_type == "key_points":
+            summary_instruction = "Elenca i punti chiave più importanti in formato bullet point"
+        else:  # comprehensive
+            summary_instruction = "Crea un riassunto completo e dettagliato"
+
+        prompt = f"""Sei un esperto nell'analisi e sintesi di documenti tecnici.
+            === RISPOSTA DA RIASSUMERE ===
+            {llm_response_content}
+
+            === ISTRUZIONI ===
+            {summary_instruction} della risposta fornita sopra.
+            Mantieni l'accuratezza delle informazioni e usa un linguaggio chiaro e professionale.
+
+            === RIASSUNTO ==="""
+
+        try:
+            lc_message = self.llm.invoke(prompt)
+
+            if getattr(lc_message, "content", None):
+                answer = lc_message.content.strip()
+                confidence = 0.8  # Confidence alta per i riassunti
+
+                # Salva il riassunto nel JSON
+                try:
+                    summary_dir = Path("summary")
+                    summary_dir.mkdir(parents=True, exist_ok=True)
+
+                    # Crea il file JSON con query e summary
+                    json_data = {
+                        "query": query,
+                        "summary": answer
+                    }
+
+                    json_file = summary_dir / "query_response.json"
+                    with open(json_file, 'w', encoding='utf-8') as f:
+                        json.dump(json_data, f, ensure_ascii=False, indent=2)
+                    self.logger.info(f"File JSON salvato in: {json_file}")
+                except Exception as e:
+                    self.logger.warning(f"Impossibile salvare il file JSON: {e}")
+
+                return json_data["summary"]
+
+        except Exception as e:
+            self.logger.error(f"Errore nella generazione del riassunto: {e}")
+
+        return self._generate_fallback_answer("riassunto", [])
+
+        
 def create_gemini_generator(config: Optional[GenerationConfig] = None, 
                            api_key: Optional[str] = None) -> GeminiGenerator:
     """Factory function per creare un generatore Gemini"""

@@ -334,7 +334,7 @@ def compute_token_costs(
     input_tokens: int,
     output_tokens: int,
     paid_level: bool = False,
-    prompt_length: Optional[int] = None,
+    prompt_length: Optional[int] = 0,
 ) -> Dict[str, float]:
     """Calcola il costo stimato (USD) dato il numero di token in input e output.
 
@@ -364,10 +364,10 @@ def compute_token_costs(
             "total_cost_usd": 0,
         }
 
-    if model_name == "gemini-1.5-flash":
+    if model_name == "gemini-2.0-flash-lite":
         # Prezzi per 1 MILIONE di token
-        input_price_per_million = 0.075 if (prompt_length or 0) <= 128000 else 0.15
-        output_price_per_million = 0.30 if (prompt_length or 0) <= 128000 else 0.60
+        input_price_per_million = 0.075 
+        output_price_per_million = 0.30
 
         # Converti a prezzo per 1.000 token
         input_price_per_thousand = input_price_per_million / 1000
