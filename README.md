@@ -98,20 +98,24 @@ Nota: Indicizzazioni eseguibili in back office
 - **Processo**: Google Gemini genera riassunto basato sul contesto
 - **Output**: Riassunto generato anche salvato in un file json (sovrascrivibile)
 
-## Telemetry (Langfuse)
 ```mermaid
 graph TD
-    A[User input] --> B[Query transformation]
-    B --> C[Fusion retrieval]
-    C --> D[Answer generation]
-    D --> E[Summary generation]
+    A[User input] --> B[**Query transformation**]
+    B --> C[**Retrieval**]
+    C --> D[**Answer**]
+    D --> E[**Summary**]
 
     %% Note esplicative
-    B --- B_note["Note: può avere 3 tipi di trasformazioni"]
-    C --- C_note["Note: prende le query trasformate e fa il retrieval"]
-    D --- D_note["Note: prende il prompt con le query trasformate e genera la risposta tramite Gemini"]
-    E --- E_note["Note: prende il prompt che contiene la risposta e crea il riassunto (Gemini)"]
+    A --- A_note[Query dell'utente]
+    B --- B_note[Trasforma la query dell'utente in una o più query (*rewrite*, *decomposition*, *step-back*)]
+    C --- C_note[Prende le query trasformate e fa il retrieval tramite *Fusion retrieval*]
+    D --- D_note["Note: prende il prompt con le query trasformate e genera la risposta"]
+    E --- E_note["Note: prende il prompt che contiene la risposta e crea il riassunto"]
 
 ```
+
+## Telemetry (Langfuse)
+- **Info**: Segue il workflow dell'applicativo tramite context management
+- **Benefici**: Aggiunge il tracciamento del workflow dell'applicativo e delle chiamate al LLM
 
 Nota: per utilizzare Langfuse, è necessario avere un account su Langfuse e configurare le API keys in .env
