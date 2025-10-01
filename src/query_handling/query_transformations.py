@@ -27,36 +27,68 @@ class QueryTransformer:
         self.logger = logging.getLogger(__name__)
         self._gemini_model = None  # lazy init
 
-    def transform(self, query: str) -> List[str]:
+    def transform(self, query: str) -> tuple[List[str], dict]:
+        """Trasforma la query in diverse varianti.
+        
+        Returns:
+            tuple: (lista_di_varianti, llm_datas)
+            dove llm_datas è un dizionario che contiene:
+            - prompr_used: str
+            - transformations: list<dict>
+            - transformations[i]: {type: str, query: str}
+
+            Return example:
+            (['query1', 'query2'], 
+             {'prompt_used': 'prompt', 'transformations': [{'type': 'original', 'query': 'original_query'}, {'type': 'decomposed', 'query': 'transformed_query'}]})
+        """
         variants: List[str] = []
+        llm_datas = {
+            'prompt_used': '',
+            'transformations': [],
+            'input_tokens': 0,
+            'output_tokens': 0
+        }
 
         base = query.strip()
         if not base:
-            return []
+            return [], llm_datas
 
         # Mantieni l'originale sempre come prima variante
-        variants.append(base)
+        # variants.append(base)
+        llm_datas['transformations'].append({
+            'type': 'original',
+            'query': base
+        })
 
         if self.config.enable_decompose:
             decomposed = self._decompose(base)
-            # Log e stampa in console delle sotto-domande decomposte
             self.logger.info(f"Decompose: generate {len(decomposed)} varianti -> {decomposed}")
             print(f"[QueryTransform] Decompose ({len(decomposed)}): {decomposed}")
             variants.extend(decomposed)
+            llm_datas['transformations'].extend([
+                {'type': 'decomposed', 'query': d} for d in decomposed
+            ])
 
         if self.config.enable_rewrite:
-            rewritten = self._rewrite(base)
-            # Log e stampa in console delle riformulazioni
+            rewritten, llm_response, prompt_used, token_info = self._rewrite(base)
             self.logger.info(f"Rewrite: generate {len(rewritten)} varianti -> {rewritten}")
             print(f"[QueryTransform] Rewrite ({len(rewritten)}): {rewritten}")
             variants.extend(rewritten)
+            llm_datas['prompt_used'] = prompt_used
+            llm_datas['input_tokens'] = token_info.get('input_tokens', 0)
+            llm_datas['output_tokens'] = token_info.get('output_tokens', 0)
+            llm_datas['transformations'].extend([
+                {**{'type': 'rewritten', 'query': r}, **token_info} for r in rewritten
+            ])
 
         if self.config.enable_expand:
             expanded = self._expand(base)
-            # Log e stampa in console delle espansioni
             self.logger.info(f"Expand: generate {len(expanded)} varianti -> {expanded}")
             print(f"[QueryTransform] Expand ({len(expanded)}): {expanded}")
             variants.extend(expanded)
+            llm_datas['transformations'].extend([
+                {'type': 'expanded', 'query': e} for e in expanded
+            ])
 
         # Normalizza: rimuovi duplicati, vuoti, limita a max_transformations
         cleaned = []
@@ -71,7 +103,7 @@ class QueryTransformer:
             cleaned = cleaned[: self.config.max_transformations]
 
         self.logger.info(f"Generate {len(cleaned)} varianti di query")
-        return cleaned
+        return cleaned, llm_datas
 
     def _decompose(self, query: str) -> List[str]:
         """Decomposizione tramite Gemini con fallback euristico."""
@@ -101,8 +133,13 @@ class QueryTransformer:
                 break
         return [p for p in parts if len(p.split()) > 2 and p.lower() != query.lower()]
 
-    def _rewrite(self, query: str) -> List[str]:
-        """Riformulazione tramite Gemini."""
+    def _rewrite(self, query: str) -> tuple[List[str], str, str, dict]:
+        """Riformulazione tramite Gemini.
+        
+        Returns:
+            tuple: (varianti_query, llm_response, prompt_used, token_info)
+            dove token_info è un dizionario con input_tokens e output_tokens
+        """
         try:
             lang = getattr(self.config, "language", "it")
             prompt = (
@@ -112,18 +149,19 @@ class QueryTransformer:
                 f"Rispondi in {lang}.\n"
                 "Query riscritta:"
             )
-            response_text = self._gemini_generate(prompt)
+            response_text, prompt_used, token_info = self._gemini_generate(prompt)
             if response_text:
                 # Prendi la prima riga non vuota come riformulazione
                 lines = [l.strip("- *# ") for l in response_text.splitlines() if l.strip()]
                 if lines:
-                    return [lines[0]]
+                    return [lines[0]], response_text, prompt_used, token_info
         except Exception as e:
             self.logger.warning(f"Fallback rewrite euristico per errore Gemini: {e}")
 
         # Fallback semplice
         q = query.rstrip(" ?!.")
-        return [f"Spiega {q}", f"Descrivi {q}", f"Dettagli su {q}", f"Come funziona {q}?"]
+        fallback_queries = [f"Spiega {q}", f"Descrivi {q}", f"Dettagli su {q}", f"Come funziona {q}?"]
+        return fallback_queries, "Fallback to simple rewrite", "", {'input_tokens': 0, 'output_tokens': 0}
 
     def _expand(self, query: str) -> List[str]:
         """Step-back tramite Gemini (query più generali)."""
@@ -154,16 +192,27 @@ class QueryTransformer:
             expansions.append(f"{query} esempio passo passo")
         return expansions
 
-    def _gemini_generate(self, prompt: str) -> Optional[str]:
-        """Esegue una chiamata a Gemini e restituisce il testo."""
+    def _gemini_generate(self, prompt: str) -> tuple[Optional[str], str, dict]:
+        """Esegue una chiamata a Gemini e restituisce il testo, il prompt e i token usati.
+        
+        Returns:
+            tuple: (testo_risposta, prompt_usato, token_info)
+            dove token_info è un dizionario con:
+            - input_tokens: numero di token in input
+            - output_tokens: numero di token in output
+        """
         model = self._get_gemini_model()
+        token_info = {'input_tokens': 0, 'output_tokens': 0}
         try:
             resp = model.generate_content(prompt)
             if hasattr(resp, "text") and resp.text:
-                return resp.text.strip()
+                # Stima dei token (approssimativa, in quanto l'API Gemini non fornisce direttamente il conteggio)
+                token_info['input_tokens'] = len(prompt.split())  # Approssimazione
+                token_info['output_tokens'] = len(resp.text.strip().split())  # Approssimazione
+                return resp.text.strip(), prompt, token_info
         except Exception as e:
             self.logger.error(f"Errore chiamata Gemini: {e}")
-        return None
+        return None, prompt, token_info
 
     def _get_gemini_model(self):
         """Inizializza pigramente il modello Gemini usando GOOGLE_API_KEY."""

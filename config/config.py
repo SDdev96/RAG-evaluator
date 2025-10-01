@@ -4,6 +4,9 @@ Configurazione per il sistema RAG avanzato
 import os
 from dataclasses import dataclass
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @dataclass
@@ -82,6 +85,31 @@ class GenerationConfig:
 
 
 @dataclass
+class LangfuseConfig:
+    """Configuration class for Langfuse settings.
+    
+    Args:
+        public_key: chiave pubblica
+        secret_key: chiave segreta
+        host: URL del server Langfuse 
+        debug: 
+    """
+    public_key: Optional[str] = os.getenv("LANGFUSE_PUBLIC_KEY")
+    secret_key: Optional[str] = os.getenv("LANGFUSE_SECRET_KEY")
+    release: Optional[str] = os.getenv("LANGFUSE_RELEASE")
+    host: str = "https://cloud.langfuse.com"
+    debug: bool = False
+    
+    def is_valid(self) -> bool:
+        """Check if the configuration has required keys.
+        
+        Returns:
+            bool: True if the configuration is valid, False otherwise.
+        """
+        return bool(self.public_key and self.secret_key)
+
+
+@dataclass
 class EmbeddingsSystemConfig:
     """Configurazione per il provider di embeddings centralizzato"""
     provider: str = "huggingface"
@@ -97,6 +125,7 @@ class RAGConfig:
     query_transformations: QueryTransformationsConfig
     fusion_retrieval: FusionRetrievalConfig
     generation: GenerationConfig
+    langfuse: LangfuseConfig = None
     embeddings: EmbeddingsSystemConfig = None
     
     # API Keys
@@ -114,6 +143,10 @@ class RAGConfig:
         if self.embeddings is None:
             self.embeddings = EmbeddingsSystemConfig()
 
+        # Inizializza langfuse config se non fornita
+        if self.langfuse is None:
+            self.langfuse = LangfuseConfig()
+
         # Crea le directory se non esistono
         os.makedirs(self.vector_store_path, exist_ok=True)
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -128,5 +161,6 @@ def get_default_config() -> RAGConfig:
         query_transformations=QueryTransformationsConfig(),
         fusion_retrieval=FusionRetrievalConfig(),
         generation=GenerationConfig(),
+        langfuse=LangfuseConfig(),
         embeddings=EmbeddingsSystemConfig()
     )

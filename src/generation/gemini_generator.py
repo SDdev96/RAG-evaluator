@@ -8,7 +8,6 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from src.telemetry.langfuse_setup import init_langfuse, invoke_with_langfuse
 
 from config.config import GenerationConfig
 from src.retrieval.fusion_retriever import RetrievalResult
@@ -18,6 +17,7 @@ from src.utils.helpers import compute_token_costs
 @dataclass
 class GenerationResult:
     """Risultato della generazione"""
+    prompt: str
     answer: str
     sources_used: List[str]
     confidence: float
@@ -44,12 +44,9 @@ class GeminiGenerator:
             top_k=config.top_k,
         )
 
-        # Prova a inizializzare Langfuse e invocare con callback per tracciare input/output
-        self.lf_client, self.lf_handler = init_langfuse()
-
         self.logger.info(f"Gemini Generator inizializzato con modello {config.model_name}")
     
-    def generate_answer(self, query: str, retrieved_chunks: List[RetrievalResult], 
+    def generate_answer(self, query: str, retrieved_results: List[RetrievalResult], 
                        context: Optional[Dict[str, Any]] = None) -> GenerationResult:
         """
         Genera una risposta basata sulla query e sui chunks recuperati
@@ -62,34 +59,16 @@ class GeminiGenerator:
         Returns:
             GenerationResult: Risultato della generazione
         """
-        if not retrieved_chunks:
+        if not retrieved_results:
             return self._generate_no_context_answer(query)
         
-        self.logger.info(f"Generando risposta per query con {len(retrieved_chunks)} chunks")
+        self.logger.info(f"Generando risposta per query con {len(retrieved_results)} chunks")
         
         try:
             # Costruisci il prompt
-            prompt = self._build_prompt(query, retrieved_chunks, context)
+            prompt = self._build_prompt(query, retrieved_results, context)
 
-            if self.lf_handler is not None:
-                extra_meta = {
-                    "component": "GeminiGenerator.generate_answer",
-                    "num_chunks": len(retrieved_chunks),
-                    "model": self.config.model_name,
-                }
-                lc_message = invoke_with_langfuse(
-                    self.llm,
-                    prompt,
-                    self.lf_handler,
-                    extra_config={"metadata": extra_meta},
-                )
-            else:
-                # Fallback: invocazione senza Langfuse
-                print("Langfuse non inizializzato, invocazione senza callback")
-                self.logger.warning("Langfuse non inizializzato, invocazione senza callback")
-                lc_message = self.llm.invoke(prompt)
-
-            # lc_message = self.llm.invoke(prompt)
+            lc_message = self.llm.invoke(prompt)
             
             print("Risposta dell'LLM: ", lc_message)
             self.logger.info("Risposta dell'LLM: ", lc_message)
@@ -115,15 +94,15 @@ class GeminiGenerator:
                 answer = lc_message.content.strip()
                 
                 # Estrai le fonti utilizzate
-                sources_used = [chunk.chunk_id for chunk in retrieved_chunks]
+                sources_used = [chunk.chunk_id for chunk in retrieved_results]
                 
                 # Calcola confidence basata sui scores dei chunks
-                confidence = self._calculate_confidence(retrieved_chunks, lc_message)
+                confidence = self._calculate_confidence(retrieved_results, lc_message)
                 
                 # Prepara metadati RAG
                 rag_metadata = {
                     "model_used": self.config.model_name,
-                    "num_sources": len(retrieved_chunks),
+                    "num_sources": len(retrieved_results),
                     "query_length": len(query),
                     "answer_length": len(answer),
                     "prompt_length": len(prompt)
@@ -151,6 +130,7 @@ class GeminiGenerator:
                 }
                 
                 result = GenerationResult(
+                    prompt=prompt,
                     answer=answer,
                     sources_used=sources_used,
                     confidence=confidence,
@@ -163,11 +143,11 @@ class GeminiGenerator:
             
             else:
                 self.logger.warning("Risposta vuota da Gemini")
-                return self._generate_fallback_answer(query, retrieved_chunks)
+                return self._generate_fallback_answer(query, retrieved_results)
                 
         except Exception as e:
             self.logger.error(f"Errore nella generazione con Gemini: {e}")
-            return self._generate_fallback_answer(query, retrieved_chunks)
+            return self._generate_fallback_answer(query, retrieved_results)
     
     def _build_prompt(self, query: str, chunks: List[RetrievalResult], 
                      context: Optional[Dict[str, Any]] = None) -> str:
@@ -207,7 +187,7 @@ class GeminiGenerator:
                     {context_text}
 
                     === DOMANDA DELL'UTENTE ===
-                    {query}
+                    {"\n".join(query)}
 
                     === RISPOSTA ===
                     Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla domanda dell'utente in modo completo e accurato:"""
@@ -481,7 +461,21 @@ class GeminiGenerator:
                 except Exception as e:
                     self.logger.warning(f"Impossibile salvare il file JSON: {e}")
 
-                return json_data["summary"]
+                # Estrai metadati di utilizzo dall'LLM
+                usage_metadata = getattr(lc_message, "usage_metadata", {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
+
+                return GenerationResult(
+                    prompt=prompt,
+                    answer=answer,
+                    sources_used=[],  # Riassunto non ha fonti specifiche
+                    confidence=confidence,
+                    metadata=[
+                        {},  # RAG_metadata vuoto per riassunto
+                        {},  # response_metadata vuoto per riassunto
+                        usage_metadata  # usage_metadata dall'LLM
+                    ],
+                    generation_stats={"summary_type": summary_type}
+                )
 
         except Exception as e:
             self.logger.error(f"Errore nella generazione del riassunto: {e}")

@@ -23,6 +23,7 @@ from src.query_handling.query_transformations import QueryTransformer
 from src.retrieval.fusion_retriever import FusionRetriever, RetrievalResult
 from src.generation.gemini_generator import GeminiGenerator, GenerationResult
 from src.embeddings.provider import EmbeddingsProvider
+from src.telemetry.langfuse_setup_test import LangfuseManager
 
 
 @dataclass
@@ -92,6 +93,9 @@ class AdvancedRAGPipeline:
                 self.config.generation, 
                 self.config.google_api_key
             )
+
+            # Langfuse initialize
+            self.langfuse = LangfuseManager(self.config.langfuse)
 
             self.logger.info("Tutti i componenti inizializzati con successo")
             
@@ -296,7 +300,189 @@ class AdvancedRAGPipeline:
         except Exception as e:
             self.logger.error(f"Errore nel processare la query: {e}")
             return self._create_error_response(query, str(e), start_time)
-    
+
+    def query_with_langfuse_simple_cm(self, 
+                          query: str, 
+                          top_k: int = None,
+                          include_metadata: bool = True,
+                          user_id: Optional[str] = "user_id",
+                          session_id: Optional[str] = "session_id",
+                          tags: Optional[List[str]] = []) -> RAGResponse:
+        """
+        Esegue una query completa attraverso la pipeline RAG e la traccia attraverso Langfuse
+        """
+        
+        if top_k is None:
+            top_k = get_default_config().fusion_retrieval.top_k
+        
+        if not self.state or not self.state.indices_built:
+            raise ValueError("Pipeline non inizializzata. Chiamare process_documents() prima.")
+        
+        langfuse_client = self.langfuse.get_client()
+
+        if langfuse_client:
+            start_time = datetime.now()
+            self.logger.info(f"Processando query: '{query}'")
+
+            try:
+                # ROOT: rag_pipeline
+                with langfuse_client.start_as_current_span(
+                    name="rag_pipeline", 
+                    input=query,
+                ) as rag_pipeline:
+
+                    rag_pipeline.update_trace(
+                        user_id=user_id,
+                        session_id=session_id,
+                        version="test_version",
+                        tags= tags or ["rag", "nested"],
+                    )
+
+                    # 1. query_transformation
+                    with rag_pipeline.start_as_current_observation(
+                        name="query_transformation",
+                        as_type="generation",
+                        model="query_transformer",
+                        input=query,
+                        
+                    ) as query_transf:
+
+                        variants, llm_datas = self.query_transformer.transform(query)
+
+                        query_transf.update(
+                            output=llm_datas['transformations'][1]["query"],
+                            usage_details = {"input_tokens": llm_datas["input_tokens"], 
+                                             "output_tokens": llm_datas["output_tokens"], 
+                                             "total_tokens": llm_datas["input_tokens"] + llm_datas["output_tokens"]},
+                            metadata = {"prompt usato": llm_datas['prompt_used'], 
+                                        "queries": llm_datas['transformations'],
+                                        "variants": variants},
+                        )
+
+                        queries_for_retrieval = variants if variants else [query] 
+
+                        # 2. Retrieval
+                        with query_transf.start_as_current_observation(
+                            name="retrieval",
+                            as_type="retriever",
+                            model="fusion_retriever",
+                            input="\n".join(queries_for_retrieval),
+                        ) as retrieval_obs:
+
+                            retrieval_results = self.retriever.retrieve_multi(queries_for_retrieval, top_k)
+
+                            retrieval_obs.update(
+                                output="\n".join([f"[{result.chunk_id}] ({result.score:.3f})\n {result.content}" for result in retrieval_results]),
+                                metadata = retrieval_results
+                            )
+
+                            generation_result = self.generator.generate_answer(queries_for_retrieval, retrieval_results)
+
+                            # 3. Answer Generation
+                            with retrieval_obs.start_as_current_observation(
+                                name="answer_generation",
+                                as_type="generation",
+                                model=self.generator.config.model_name if hasattr(self.generator.config, 'model_name') else "llm_generator",
+                                input=generation_result.prompt,
+                            ) as answer_gen:
+
+                                answer_gen.update(
+                                    output=generation_result.answer,
+                                    metadata = generation_result,
+                                    usage_details = {"input_tokens": generation_result.metadata[2]["input_tokens"], 
+                                                     "output_tokens": generation_result.metadata[2]["output_tokens"], 
+                                                     "total_tokens": generation_result.metadata[2]["input_tokens"] + generation_result.metadata[2]["output_tokens"]},
+                                )
+
+                                summary_result = self.generator.generate_summary_from_llm_response(query, generation_result.answer)
+
+                                # 4. Summary Generation
+                                with answer_gen.start_as_current_observation(
+                                    name="summary_generation",
+                                    as_type="generation",
+                                    model=self.generator.config.model_name if hasattr(self.generator.config, 'model_name') else "llm_generator",
+                                    input=summary_result.prompt
+                                ) as summary_gen:
+
+                                    summary_gen.update(
+                                        output={"summary": summary_result.answer},
+                                        metadata = summary_result,
+                                        usage_details = {"input_tokens": summary_result.metadata[2]["input_tokens"], 
+                                                         "output_tokens": summary_result.metadata[2]["output_tokens"], 
+                                                         "total_tokens": summary_result.metadata[2]["input_tokens"] + summary_result.metadata[2]["output_tokens"]},
+                                    )
+
+
+                                # Fine pipeline → aggiorno rag_pipeline
+                                processing_time = (datetime.now() - start_time).total_seconds()
+
+                                metadata = {
+                                    "processing_time_seconds": processing_time,
+                                    "num_chunks_retrieved": len(retrieval_results),
+                                    "num_documents_in_index": len(self.state.processed_documents),
+                                    "pipeline_version": "1.0",
+                                    "timestamp": datetime.now().isoformat()
+                                }
+
+                                if include_metadata:
+                                    metadata.update({
+                                        "retrieval_stats": self.retriever.get_retrieval_statistics(retrieval_results),
+                                        "chunking_stats": self.chunker.get_chunk_statistics(self.state.semantic_chunks),
+                                        "query_variants": variants,
+                                    })
+
+                                response = RAGResponse(
+                                    query=query,
+                                    answer=generation_result.answer,
+                                    sources=generation_result.sources_used,
+                                    confidence=generation_result.confidence,
+                                    processing_time=processing_time,
+                                    metadata=metadata,
+                                    retrieval_results=retrieval_results,
+                                    generation_result=generation_result,
+                                    summary=summary_result
+                                )
+
+                                rag_pipeline.update(
+                                    output={
+                                        "answer": response.answer,
+                                        "retrieval_results": response.retrieval_results,
+                                        "num_sources": response.sources,
+                                        "generation_result": response.generation_result,
+                                        "summary": response.summary,
+                                        "confidence": response.confidence,
+                                        "processing_time": response.processing_time,
+                                    },
+                                    metadata=response.metadata
+                                )
+
+                                self.logger.info(f"Query processata in {processing_time:.2f} secondi")
+                                return response
+
+            except Exception as e:
+                self.logger.error(f"Errore nel processare la query: {e}")
+                error_response = self._create_error_response(query, str(e), start_time)
+                
+                if langfuse_client:
+                    with langfuse_client.start_as_current_span(
+                        name="rag_query_pipeline_error",
+                        input={"user_query": query},
+                    ) as error_span:
+                        error_span.update_trace(
+                            user_id=user_id,
+                            session_id=session_id,
+                            tags=["error"] + (tags or [])
+                        )
+                        error_span.update(
+                            output={"error": str(e)},
+                            metadata={"error_type": type(e).__name__}
+                        )
+                
+                return error_response
+        else:
+            return self.query(query, top_k, include_metadata)
+
+
     def batch_query(self, queries: List[str], **kwargs) -> List[RAGResponse]:
         """Processa una lista di query in batch"""
         self.logger.info(f"Processando {len(queries)} query in batch")

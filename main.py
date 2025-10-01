@@ -111,7 +111,7 @@ def interactive_mode(pipeline):
             print("🤔 Elaborando...")
 
             #Oggetto RagResponse
-            response = pipeline.query(user_input)
+            response = pipeline.query_with_langfuse_simple_cm(user_input)
             
             print(f"\n🎯 Risposta (Confidence: {response.confidence:.2f}):")
             print(response.answer)

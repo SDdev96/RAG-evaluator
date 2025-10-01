@@ -187,8 +187,8 @@ class FusionRetriever:
         bm25_acc: Dict[int, float] = {}
 
         for q in queries:
-            vec = self._vector_search(q, top_k * 2)
-            bm = self._bm25_search(q, top_k * 2)
+            vec = self._vector_search(q, top_k)
+            bm = self._bm25_search(q, top_k)
 
             # Normalizza singolarmente per query per rendere comparabili
             vec_scores = self._normalize_scores([s for _, s in vec])
