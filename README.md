@@ -105,6 +105,13 @@ graph TD
     B --> C[Fusion retrieval]
     C --> D[Answer generation]
     D --> E[Summary generation]
+
+    %% Note esplicative
+    B --- B_note["Note: può avere 3 tipi di trasformazioni"]
+    C --- C_note["Note: prende le query trasformate e fa il retrieval"]
+    D --- D_note["Note: prende il prompt con le query trasformate e genera la risposta tramite Gemini"]
+    E --- E_note["Note: prende il prompt che contiene la risposta e crea il riassunto (Gemini)"]
+
 ```
 
 Nota: per utilizzare Langfuse, è necessario avere un account su Langfuse e configurare le API keys in .env
