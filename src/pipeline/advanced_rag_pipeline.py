@@ -23,7 +23,7 @@ from src.query_handling.query_transformations import QueryTransformer
 from src.retrieval.fusion_retriever import FusionRetriever, RetrievalResult
 from src.generation.gemini_generator import GeminiGenerator, GenerationResult
 from src.embeddings.provider import EmbeddingsProvider
-from src.telemetry.langfuse_setup_test import LangfuseManager
+from src.telemetry.langfuse_setup import LangfuseManager
 
 
 @dataclass

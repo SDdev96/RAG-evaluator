@@ -1,75 +1,224 @@
 """
-Langfuse setup utilities using CallbackHandler, based on the provided snippet.
+Langfuse setup utilities using Object-Oriented Programming paradigm.
 
 Usage:
-    from src.telemetry.langfuse_setup import init_langfuse
-    langfuse, langfuse_handler = init_langfuse()
-    # Then pass `langfuse_handler` in LangChain calls, e.g.:
-    # chain.invoke({"input": user_input}, config={"callbacks": [langfuse_handler]})
+    from src.telemetry.langfuse_setup import LangfuseManager
+    
+    # Initialize manager
+    manager = LangfuseManager()
+    
+    # Use with context manager (recommended)
+    with manager:
+        response = manager.invoke_model(model, prompt, extra_config={"temperature": 0.7})
+    
+    # Or manual initialization/cleanup
+    manager.initialize()
+    try:
+        response = manager.invoke_model(model, prompt)
+    finally:
+        manager.cleanup()
 """
-# from __future__ import annotations
 
 import os
-from typing import Optional, Tuple, Any, Dict
+import logging
+from typing import Optional, Any, Dict, Union
+from abc import ABC, abstractmethod
+# from dataclasses import dataclass
 from dotenv import load_dotenv
 
 # External SDK
-from langfuse import Langfuse, get_client, observe
+from langfuse import Langfuse, get_client
 from langfuse.langchain import CallbackHandler
 
-# Load .env to allow LANGFUSE_* variables
+from config.config import LangfuseConfig
+
 load_dotenv()
 
-# Environment-based configuration (preferred)
-os.environ["LANGFUSE_PUBLIC_KEY"] = os.getenv("LANGFUSE_PUBLIC_KEY", "")
-os.environ["LANGFUSE_SECRET_KEY"] = os.getenv("LANGFUSE_SECRET_KEY", "")
-LF_HOST = "https://cloud.langfuse.com"
+
+class LangfuseInitializationError(Exception):
+    """Custom exception for Langfuse initialization errors."""
+    pass
 
 
-def init_langfuse() -> Tuple[Optional[Langfuse], Optional[CallbackHandler]]:
-    """Initialize Langfuse and return (client, handler).
-
-    Priority:
-    1) Use environment variables (LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY)
-    2) If not set, optionally use hardcoded keys above (if you set them)
-    3) Otherwise, return (None, None)
-    """
-
-    if os.environ.get("LANGFUSE_PUBLIC_KEY") is None and os.environ.get("LANGFUSE_SECRET_KEY") is None:
-        return None, None
-
-    try:
-        langfuse = get_client()
-        # Optionally, initialize the client with configuration options if you dont use environment variables (os.environ)
-        # langfuse = Langfuse(public_key="pk-lf-...", secret_key="sk-lf-...")
-
-        handler = CallbackHandler()
-        print("Langfuse initialized successfully with handler")
-        
-        return langfuse, handler
-    except Exception as e:
-        print(f"Langfuse initialization error: {e}")
-        return None, None 
-
-@observe(name="Old test")
-def invoke_with_langfuse(model: Any, prompt: Any, handler: CallbackHandler, extra_config: Optional[Dict[str, Any]] = None) -> Any:
-    """Invoca un modello LangChain passando il CallbackHandler di Langfuse.
-
-    Args:
-        model: Un'istanza compatibile con LangChain che espone `invoke(input, config=...)` (es. ChatGoogleGenerativeAI, Runnable, Chain).
-        prompt: L'input da inviare al modello (str, dict, o struttura supportata da `invoke`).
-        handler: Istanza di `langfuse.langchain.CallbackHandler` da allegare come callback.
-        extra_config: Config opzionale da unire a `{"callbacks": [handler]}`.
-
-    Returns:
-        La risposta dell'invocazione del modello (es. AIMessage per modelli chat).
-    """
-    if handler is None:
-        raise ValueError("Langfuse handler è None: inizializza Langfuse prima di invocare il modello.")
-
-    cfg: Dict[str, Any] = dict(extra_config or {})
-    callbacks = list(cfg.get("callbacks", []))
-    callbacks.append(handler)
-    cfg["callbacks"] = callbacks
+class BaseLangfuseManager(ABC):
+    """Abstract base class for Langfuse management."""
     
-    return model.invoke(prompt, config=cfg)
+    @abstractmethod
+    def initialize(self) -> bool:
+        """Initialize Langfuse client and handler."""
+        pass
+    
+    @abstractmethod
+    def is_initialized(self) -> bool:
+        """Check if Langfuse is properly initialized."""
+        pass
+
+    @abstractmethod
+    def get_client(self) -> Optional[Langfuse]:
+        """Get the Langfuse client instance."""
+        pass
+    
+    @abstractmethod
+    def get_handler(self) -> Optional[CallbackHandler]:
+        """Get the Langfuse callback handler."""
+        pass
+
+
+class LangfuseManager(BaseLangfuseManager):
+    """
+    Main class for managing Langfuse client and callback handler.
+    
+    Provides initialization, configuration, and model invocation utilities
+    with proper error handling and logging.
+    """
+    
+    def __init__(self, config: LangfuseConfig):
+        """
+        Initialize LangfuseManager.
+        
+        Args:
+            config: Langfuse configuration. If None, loads from environment.
+        """
+        self.config = config
+        self.logger = logging.getLogger(__name__)
+        
+        self._client: Optional[Langfuse] = None
+        self._handler: Optional[CallbackHandler] = None
+        self._initialized = False
+
+        self.initialize()
+    
+    def initialize(self) -> bool:
+        """
+        Initialize Langfuse client and callback handler.
+        
+        Returns:
+            True if initialization was successful, False otherwise.
+            
+        Raises:
+            LangfuseInitializationError: If initialization fails with invalid config.
+        """
+        if self._initialized:
+            self.logger.debug("Langfuse already initialized")
+            return True
+        
+        if not self.config.is_valid():
+            error_msg = "Missing LANGFUSE_PUBLIC_KEY or LANGFUSE_SECRET_KEY in configuration"
+            self.logger.warning(error_msg)
+            raise LangfuseInitializationError(error_msg)
+        
+        try:
+            # Set environment variables for langfuse client
+            os.environ["LANGFUSE_PUBLIC_KEY"] = self.config.public_key
+            os.environ["LANGFUSE_SECRET_KEY"] = self.config.secret_key
+            os.environ["LANGFUSE_HOST"] = self.config.host
+            os.environ["LANGFUSE_RELEASE"] = self.config.release
+            
+            self._client = get_client()
+            self._handler = CallbackHandler()
+            self._initialized = True
+            
+            self.logger.info("Langfuse initialized successfully")
+            return True
+            
+        except Exception as e:
+            error_msg = f"Langfuse initialization failed: {e}"
+            self.logger.error(error_msg)
+            raise LangfuseInitializationError(error_msg) from e
+    
+    def is_initialized(self) -> bool:
+        """Check if Langfuse is properly initialized."""
+        return self._initialized and self._client is not None and self._handler is not None
+    
+    def get_client(self) -> Optional[Langfuse]:
+        """Get the Langfuse client instance."""
+        return self._client
+    
+    def get_handler(self) -> Optional[CallbackHandler]:
+        """Get the Langfuse callback handler."""
+        return self._handler
+           
+    def invoke_model_with_langchain(
+        self, 
+        model: Any, 
+        prompt: Union[str, Dict[str, Any]], 
+        extra_config: Optional[Dict[str, Any]] = None,
+        auto_initialize: bool = True
+    ) -> Any:
+        """
+        Invoke a LangChain model with Langfuse callback handler.
+        
+        Args:
+            model: LangChain compatible model instance.
+            prompt: Input for the model (string, dict, or compatible structure).
+            extra_config: Optional additional configuration to merge.
+            auto_initialize: Whether to automatically initialize if not already done.
+        
+        Returns:
+            The model's response.
+            
+        Raises:
+            LangfuseInitializationError: If Langfuse is not initialized and auto_initialize is False.
+            ValueError: If handler is None after initialization attempts.
+        """
+        if not self.is_initialized():
+            if auto_initialize:
+                if not self.initialize():
+                    raise LangfuseInitializationError("Failed to auto-initialize Langfuse")
+            else:
+                raise LangfuseInitializationError("Langfuse not initialized. Call initialize() first or set auto_initialize=True")
+        
+        if self._handler is None:
+            raise ValueError("Langfuse handler is None after initialization")
+        
+        # Build configuration with callbacks
+        config = dict(extra_config or {})
+        callbacks = list(config.get("callbacks", []))
+        callbacks.append(self._handler)
+        config["callbacks"] = callbacks
+        
+        self.logger.debug(f"Invoking model with Langfuse handler. Config: {config}")
+        
+        try:
+            response = model.invoke(prompt, config=config)
+            self.logger.debug("Model invocation completed successfully")
+            return response
+        except Exception as e:
+            self.logger.error(f"Model invocation failed: {e}")
+            raise
+
+    def cleanup(self) -> None:
+        """Clean up resources and reset state."""
+        try:
+            if self._handler:
+                # Flush any pending traces
+                if hasattr(self._handler, 'flush'):
+                    self._handler.flush()
+            
+            if self._client:
+                # Flush client if it has the method
+                if hasattr(self._client, 'flush'):
+                    self._client.flush()
+            
+            self.logger.info("Langfuse cleanup completed")
+        except Exception as e:
+            self.logger.warning(f"Error during cleanup: {e}")
+        finally:
+            self._client = None
+            self._handler = None
+            self._initialized = False
+    
+    def __enter__(self):
+        """Context manager entry.
+        
+        Initializes Langfuse client and handler if not already initialized.
+        
+        Returns:
+            LangfuseManager: The initialized LangfuseManager instance.
+        """
+        self.initialize()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with cleanup."""
+        self.cleanup()

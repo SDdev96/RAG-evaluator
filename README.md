@@ -98,9 +98,13 @@ Nota: Indicizzazioni eseguibili in back office
 - **Processo**: Google Gemini genera riassunto basato sul contesto
 - **Output**: Riassunto generato anche salvato in un file json (sovrascrivibile)
 
-### 6. Telemetry (Langfuse)
-- **Input**: Prompt + risposta LLM
-- **Processo**: Langfuse registra input/output e metadati
-- **Output**: Tracciato completo con token cost e altri metadati
+## Telemetry (Langfuse)
+```mermaid
+graph TD
+    A[User input] --> B[Query transformation]
+    B --> C[Fusion retrieval]
+    C --> D[Answer generation]
+    D --> E[Summary generation]
+```
 
 Nota: per utilizzare Langfuse, è necessario avere un account su Langfuse e configurare le API keys in .env

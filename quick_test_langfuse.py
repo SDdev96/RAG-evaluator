@@ -35,12 +35,13 @@ except ImportError:
 
 # LangChain imports
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
+from langchain.schema import HumanMessage, AIMessage
 from langchain.prompts import ChatPromptTemplate
-from langchain.schema.runnable import RunnablePassthrough
 
 # Import nostro manager
-from src.telemetry.langfuse_setup_test import LangfuseManager, LangfuseConfig
+from src.telemetry.langfuse_setup import LangfuseManager
+
+from config.config import LangfuseConfig
 
 # Load environment variables
 load_dotenv()
