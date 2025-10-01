@@ -100,18 +100,17 @@ Nota: Indicizzazioni eseguibili in back office
 
 ```mermaid
 graph TD
-    A[User input] --> B[**Query transformation**]
-    B --> C[**Retrieval**]
-    C --> D[**Answer**]
-    D --> E[**Summary**]
+    A[User input] --> B[Query transformation]
+    B --> C[Retrieval]
+    C --> D[Answer]
+    D --> E[Summary]
 
     %% Note esplicative
     A --- A_note[Query dell'utente]
-    B --- B_note[Trasforma la query dell'utente in una o più query (*rewrite*, *decomposition*, *step-back*)]
-    C --- C_note[Prende le query trasformate e fa il retrieval tramite *Fusion retrieval*]
-    D --- D_note["Note: prende il prompt con le query trasformate e genera la risposta"]
-    E --- E_note["Note: prende il prompt che contiene la risposta e crea il riassunto"]
-
+    B --- B_note[Trasforma la query dell'utente in una o più query (rewrite, decomposition, step-back)]
+    C --- C_note[Prende le query trasformate e fa il retrieval tramite Fusion retrieval]
+    D --- D_note[Prende il prompt con le query trasformate e genera la risposta]
+    E --- E_note[Prende il prompt che contiene la risposta e crea il riassunto]
 ```
 
 ## Telemetry (Langfuse)
