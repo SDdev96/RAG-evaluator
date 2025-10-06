@@ -10,6 +10,8 @@ from typing import List, Optional
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.embeddings import Embeddings
 
+from config.config import EmbeddingsSystemConfig
+
 @dataclass
 class EmbeddingsConfig:
     """Configurazione per il provider di embeddings"""
@@ -28,12 +30,12 @@ class EmbeddingsProvider:
     _instance_lock = threading.Lock()
     _singleton: Optional[EmbeddingsProvider] = None
 
-    def __init__(self, config: EmbeddingsConfig):
+    def __init__(self, config: EmbeddingsSystemConfig):
         self.config = config
         self._lc_embeddings: Optional[Embeddings] = None
 
     @classmethod
-    def get(cls, config: EmbeddingsConfig) -> EmbeddingsProvider:
+    def get(cls, config: EmbeddingsSystemConfig) -> EmbeddingsProvider:
         """Singleton opzionale per garantire riuso dello stesso provider"""
         with cls._instance_lock:
             if cls._singleton is None:

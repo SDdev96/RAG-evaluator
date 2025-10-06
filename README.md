@@ -100,9 +100,9 @@ Nota: Indicizzazioni eseguibili in back office
 
 ```mermaid
 graph TD
-    A["**User input**"] --> B["*Query transformation*<br/>- rewrite<br/>- decomposition<br/>- expansion"]
+    A["**User input**"] --> B["**Query transformation**<br/>- rewrite<br/>- decomposition<br/>- expansion"]
     B --> C["**Fusion retrieval**<br/>Usa le query trasformate per cercare i chunk rilevanti"]
-    C --> D["*Answer generation (Gemini)*<br/>Prende il prompt con query + contesto<br/>Genera la risposta"]
+    C --> D["**Answer generation**<br/>Prende il prompt con query + contesto<br/>Genera la risposta"]
     D --> E["**Summary generation**<br/>Prende la risposta e ne fa un riassunto"]
 ```
 

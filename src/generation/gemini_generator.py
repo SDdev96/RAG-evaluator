@@ -17,6 +17,7 @@ from src.utils.helpers import compute_token_costs
 @dataclass
 class GenerationResult:
     """Risultato della generazione"""
+    query: str
     prompt: str
     answer: str
     sources_used: List[str]
@@ -73,20 +74,20 @@ class GeminiGenerator:
             print("Risposta dell'LLM: ", lc_message)
             self.logger.info("Risposta dell'LLM: ", lc_message)
 
-            # Accesso sicuro ai campi
-            input_tokens = lc_message.usage_metadata.get('input_tokens', 0)  # Default a 0 se non presente
-            output_tokens = lc_message.usage_metadata.get('output_tokens', 0)  # Default a 0 se non presente
+            # # Accesso sicuro ai campi
+            # input_tokens = lc_message.usage_metadata.get('input_tokens', 0)  # Default a 0 se non presente
+            # output_tokens = lc_message.usage_metadata.get('output_tokens', 0)  # Default a 0 se non presente
 
-            # Ora puoi usarli, ad esempio:
-            token_cost = compute_token_costs(
-                model_name=self.config.model_name,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                paid_level=False, # TODO: da modificare quando si passa al livello pagante
-                prompt_length=len(prompt)
-            )
-            self.logger.info(f"Token cost: ${token_cost['total_cost_usd']}")
-            print("Total cost: $", token_cost["total_cost_usd"])
+            # # Ora puoi usarli, ad esempio:
+            # token_cost = compute_token_costs(
+            #     model_name=self.config.model_name,
+            #     input_tokens=input_tokens,
+            #     output_tokens=output_tokens,
+            #     paid_level=False, # TODO: da modificare quando si passa al livello pagante
+            #     prompt_length=len(prompt)
+            # )
+            # self.logger.info(f"Token cost: ${token_cost['total_cost_usd']}")
+            # print("Total cost: $", token_cost["total_cost_usd"])
 
 
             # Processa la risposta
@@ -130,6 +131,7 @@ class GeminiGenerator:
                 }
                 
                 result = GenerationResult(
+                    query="\n".join(query),
                     prompt=prompt,
                     answer=answer,
                     sources_used=sources_used,
@@ -151,7 +153,16 @@ class GeminiGenerator:
     
     def _build_prompt(self, query: str, chunks: List[RetrievalResult], 
                      context: Optional[Dict[str, Any]] = None) -> str:
-        """Costruisce il prompt per Gemini"""
+        """Costruisce il prompt per Gemini
+        
+        Args:
+            query: Domanda dell'utente
+            chunks: Lista di RetrievalResult
+            context: Contesto aggiuntivo (opzionale)
+        
+        Returns:
+            str: Prompt per Gemini
+        """
         
         # Prompt di sistema
         system_prompt = """Sei un assistente AI esperto nell'analisi di documenti tecnici. 
@@ -168,10 +179,10 @@ class GeminiGenerator:
         7. Non inventare informazioni non presenti nei documenti"""
         
         # Costruisci il contesto dai chunks
-        context_text = "\n\n=== DOCUMENTI DI RIFERIMENTO ===\n"
+        context_text = "\n\n=== CHUNKS DI RIFERIMENTO ===\n"
         
         for i, chunk in enumerate(chunks, 1):
-            context_text += f"\n--- Documento {i} (ID: {chunk.chunk_id}, Score: {chunk.score:.3f}) ---\n"
+            context_text += f"\n--- Chunk {i} ({chunk.chunk_id}) ---\n"
             context_text += chunk.content
             context_text += "\n"
         
@@ -190,7 +201,7 @@ class GeminiGenerator:
                     {"\n".join(query)}
 
                     === RISPOSTA ===
-                    Basandoti esclusivamente sui documenti di riferimento forniti, rispondi alla domanda dell'utente in modo completo e accurato:"""
+                    Basandoti esclusivamente sui chunk di riferimento forniti, rispondi alla domanda dell'utente in modo completo e accurato:"""
         
         return prompt
     
@@ -242,6 +253,7 @@ class GeminiGenerator:
         o fornire più dettagli specifici?"""
         
         return GenerationResult(
+            query="\n".join(query),
             answer=answer,
             sources_used=[],
             confidence=0.0,
@@ -269,6 +281,7 @@ class GeminiGenerator:
         sources_used = [chunk.chunk_id for chunk in chunks] if chunks else []
         
         return GenerationResult(
+            query="\n".join(query),
             answer=answer,
             sources_used=sources_used,
             confidence=0.1,
@@ -427,14 +440,14 @@ class GeminiGenerator:
             summary_instruction = "Crea un riassunto completo e dettagliato"
 
         prompt = f"""Sei un esperto nell'analisi e sintesi di documenti tecnici.
-            === RISPOSTA DA RIASSUMERE ===
-            {llm_response_content}
 
             === ISTRUZIONI ===
             {summary_instruction} della risposta fornita sopra.
             Mantieni l'accuratezza delle informazioni e usa un linguaggio chiaro e professionale.
 
-            === RIASSUNTO ==="""
+            === RISPOSTA DA RIASSUMERE ===
+            {llm_response_content}
+            """
 
         try:
             lc_message = self.llm.invoke(prompt)
@@ -465,6 +478,7 @@ class GeminiGenerator:
                 usage_metadata = getattr(lc_message, "usage_metadata", {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
 
                 return GenerationResult(
+                    query=llm_response_content,
                     prompt=prompt,
                     answer=answer,
                     sources_used=[],  # Riassunto non ha fonti specifiche

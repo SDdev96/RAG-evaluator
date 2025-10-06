@@ -338,16 +338,20 @@ class AdvancedRAGPipeline:
                         tags= tags or ["rag", "nested"],
                     )
 
+                    variants, llm_datas = self.query_transformer.transform(query)
+
                     # 1. query_transformation
                     with rag_pipeline.start_as_current_observation(
                         name="query_transformation",
                         as_type="generation",
-                        model="query_transformer",
-                        input=query,
+                        model=self.generator.config.model_name if hasattr(self.generator.config, 'model_name') else "llm_generator",
+                        input=llm_datas['prompt_used'],
                         
                     ) as query_transf:
 
-                        variants, llm_datas = self.query_transformer.transform(query)
+                        # Test scores
+                        # query_transf.score(name="custom_score_test", value=0.8, data_type="NUMERIC")
+                        # query_transf.score_trace(name="user_feedback_rating", value="positive", data_type="CATEGORICAL")
 
                         query_transf.update(
                             output=llm_datas['transformations'][1]["query"],
@@ -365,14 +369,14 @@ class AdvancedRAGPipeline:
                         with query_transf.start_as_current_observation(
                             name="retrieval",
                             as_type="retriever",
-                            model="fusion_retriever",
                             input="\n".join(queries_for_retrieval),
                         ) as retrieval_obs:
 
                             retrieval_results = self.retriever.retrieve_multi(queries_for_retrieval, top_k)
+                            context_text = "\n\n".join([f"--- ({result.chunk_id}) ---\n{result.content}" for result in retrieval_results])
 
                             retrieval_obs.update(
-                                output="\n".join([f"[{result.chunk_id}] ({result.score:.3f})\n {result.content}" for result in retrieval_results]),
+                                output=context_text,
                                 metadata = retrieval_results
                             )
 
@@ -388,13 +392,13 @@ class AdvancedRAGPipeline:
 
                                 answer_gen.update(
                                     output=generation_result.answer,
-                                    metadata = generation_result,
+                                    metadata = {"generation_result": generation_result, "context_text": context_text},
                                     usage_details = {"input_tokens": generation_result.metadata[2]["input_tokens"], 
                                                      "output_tokens": generation_result.metadata[2]["output_tokens"], 
                                                      "total_tokens": generation_result.metadata[2]["input_tokens"] + generation_result.metadata[2]["output_tokens"]},
                                 )
 
-                                summary_result = self.generator.generate_summary_from_llm_response(query, generation_result.answer)
+                                summary_result = self.generator.generate_summary_from_llm_response(queries_for_retrieval, generation_result.answer)
 
                                 # 4. Summary Generation
                                 with answer_gen.start_as_current_observation(
@@ -405,7 +409,7 @@ class AdvancedRAGPipeline:
                                 ) as summary_gen:
 
                                     summary_gen.update(
-                                        output={"summary": summary_result.answer},
+                                        output=summary_result.answer,
                                         metadata = summary_result,
                                         usage_details = {"input_tokens": summary_result.metadata[2]["input_tokens"], 
                                                          "output_tokens": summary_result.metadata[2]["output_tokens"], 
@@ -507,7 +511,7 @@ class AdvancedRAGPipeline:
         
         # Seleziona i chunk più rappresentativi
         top_chunks = []
-        for chunk in self.state.semantic_chunks[:get_default_config().fusion_retrieval.top_k]:  # Top 10 chunks by default
+        for chunk in self.state.semantic_chunks[:get_default_config().fusion_retrieval.top_k]:
             result = RetrievalResult(
                 chunk_id=chunk.chunk_id,
                 content=chunk.content,
@@ -570,35 +574,6 @@ class AdvancedRAGPipeline:
                 generation_stats={}
             )
         )
-    
-    # def _load_cache(self) -> bool:
-    #     """Carica lo stato dalla cache"""
-    #     try:
-    #         if self.cache_file.exists():
-    #             with open(self.cache_file, 'rb') as f:
-    #                 self.state = pickle.load(f)
-                
-    #             # Ricostruisci gli indici
-    #             if self.state.semantic_chunks:
-    #                 self.retriever.build_indices(self.state.semantic_chunks)
-    #                 self.state.indices_built = True
-                
-    #             self.logger.info("Cache caricata con successo")
-    #             return True
-    #     except Exception as e:
-    #         self.logger.warning(f"Errore nel caricare la cache: {e}")
-        
-    #     return False
-    
-    # def _save_cache(self):
-    #     """Salva lo stato nella cache"""
-    #     try:
-    #         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-    #         with open(self.cache_file, 'wb') as f:
-    #             pickle.dump(self.state, f)
-    #         self.logger.info("Cache salvata con successo")
-    #     except Exception as e:
-    #         self.logger.warning(f"Errore nel salvare la cache: {e}")
     
     def _log_processing_statistics(self):
         """Log delle statistiche di processing"""
@@ -719,6 +694,35 @@ class AdvancedRAGPipeline:
         except Exception as e:
             self.logger.warning(f"Errore nel caricare chunk precomputati: {e}")
             return None
+
+    # def _load_cache(self) -> bool:
+    #     """Carica lo stato dalla cache"""
+    #     try:
+    #         if self.cache_file.exists():
+    #             with open(self.cache_file, 'rb') as f:
+    #                 self.state = pickle.load(f)
+                
+    #             # Ricostruisci gli indici
+    #             if self.state.semantic_chunks:
+    #                 self.retriever.build_indices(self.state.semantic_chunks)
+    #                 self.state.indices_built = True
+                
+    #             self.logger.info("Cache caricata con successo")
+    #             return True
+    #     except Exception as e:
+    #         self.logger.warning(f"Errore nel caricare la cache: {e}")
+        
+    #     return False
+    
+    # def _save_cache(self):
+    #     """Salva lo stato nella cache"""
+    #     try:
+    #         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+    #         with open(self.cache_file, 'wb') as f:
+    #             pickle.dump(self.state, f)
+    #         self.logger.info("Cache salvata con successo")
+    #     except Exception as e:
+    #         self.logger.warning(f"Errore nel salvare la cache: {e}")
     
     # def clear_cache(self):
     #     """Pulisce la cache"""

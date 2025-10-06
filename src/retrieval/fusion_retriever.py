@@ -342,8 +342,6 @@ class FusionRetriever:
         
         return stats
 
-    
-    # Persistenza indici su disco
     def save_indices(self, directory: str | os.PathLike):
         """Salva su disco l'indice vettoriale FAISS, il corpus tokenizzato per BM25
         e i metadati dei chunk necessari al retrieval.

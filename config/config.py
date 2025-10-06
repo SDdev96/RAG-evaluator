@@ -22,17 +22,6 @@ class DocumentProcessingConfig:
 
 
 @dataclass
-class ChunkingConfig:
-    """Configurazione per il semantic chunking"""
-    chunking_method: str = "semantic"
-    breakpoint_threshold_type: str = "percentile"  # percentile, standard_deviation, interquartile
-    breakpoint_threshold_amount: int = 80
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    min_chunk_size: int = 200
-    max_chunk_size: int = 2500
-
-
-@dataclass
 class QueryTransformationsConfig:
     """Configurazione per Query Transformations
     
@@ -48,22 +37,6 @@ class QueryTransformationsConfig:
     enable_expand: bool = False
     max_transformations: int = 3
     language: str = "it"
-
-
-@dataclass
-class FusionRetrievalConfig:
-    """Configurazione per Fusion Retrieval
-    
-    Args:
-        vector_weight: peso del vettore
-        bm25_weight: peso del BM25
-        top_k: numero di chunk
-        embedding_model: modello di embedding
-    """
-    vector_weight: float = 0.7  # alpha parameter
-    bm25_weight: float = 0.3
-    top_k: int = 10
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 @dataclass
@@ -115,6 +88,33 @@ class EmbeddingsSystemConfig:
     provider: str = "huggingface"
     model: str = "sentence-transformers/all-MiniLM-L6-v2"
     api_key_env: str = "HF_TOKEN"
+
+
+@dataclass
+class ChunkingConfig:
+    """Configurazione per il semantic chunking"""
+    chunking_method: str = "semantic"
+    breakpoint_threshold_type: str = "percentile"  # percentile, standard_deviation, interquartile
+    breakpoint_threshold_amount: int = 80
+    embedding_model: str = EmbeddingsSystemConfig.model
+    min_chunk_size: int = 200
+    max_chunk_size: int = 2500
+
+
+@dataclass
+class FusionRetrievalConfig:
+    """Configurazione per Fusion Retrieval
+    
+    Args:
+        vector_weight: peso del vettore
+        bm25_weight: peso del BM25
+        top_k: numero di chunk
+        embedding_model: modello di embedding
+    """
+    vector_weight: float = 0.7  # alpha parameter
+    bm25_weight: float = 0.3
+    top_k: int = 15 # numero di chunk
+    embedding_model: str = EmbeddingsSystemConfig.model
 
 
 @dataclass

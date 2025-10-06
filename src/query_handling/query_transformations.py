@@ -142,13 +142,27 @@ class QueryTransformer:
         """
         try:
             lang = getattr(self.config, "language", "it")
-            prompt = (
-                "Sei un assistente AI incaricato di riformulare le query degli utenti per migliorarne il recupero in un sistema RAG.\n"
-                "Data la query originale, riscrivila per renderla più specifica, dettagliata e in grado di recuperare informazioni rilevanti.\n\n"
-                f"Query originale: {query}\n\n"
-                f"Rispondi in {lang}.\n"
-                "Query riscritta:"
-            )
+            prompt= f"""
+            Sei un assistente specializzato nella riformulazione delle query per un sistema di Retrieval-Augmented Generation (RAG).
+            Il tuo compito è:
+                1. Analizzare la query originale.
+                2. Individuare le parole chiavi principali e i concetti rilevanti.
+                3. Riscrivere la query in forma chiara, specifica e contestualizzata e ampliandone il contesto senza cambiare il significato.
+                4. Le parole tra apici ' ' o virgolette " " e acronimi devono essere riutilizzate nella riformulazione della domanda.
+                5. Eliminare eventuali ambiguità, ridondanze e termini superflui.
+                6. Se utile, esplicitare i sinonimi, varianti lessicali o acronimi per migliorarne il recupero.
+                7. Ti verrà passata solo la query originale, individuata da "Query originale: "
+                8. La tua risposta dovrà avere solo la domanda riformulata, senza aggiungere altro.
+
+            Query originale: {query}
+            """
+            # prompt2 = (
+            #     "Sei un assistente AI incaricato di riformulare le query degli utenti per migliorarne il recupero in un sistema RAG.\n"
+            #     "Data la 'query originale', riscrivila, sempre sotto forma di domanda, per renderla più specifica, dettagliata e in grado di recuperare informazioni rilevanti.\n\n"
+            #     f"Rispondi in {lang}.\n"
+            #     f"Scrivi solo la domanda senza aggiungere altro\n\n"
+            #     f"Query originale: {query}\n"
+            # )
             response_text, prompt_used, token_info = self._gemini_generate(prompt)
             if response_text:
                 # Prendi la prima riga non vuota come riformulazione
